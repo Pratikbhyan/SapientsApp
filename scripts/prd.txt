@@ -1,0 +1,164 @@
+# Product Requirements Document: Sapients Audio-Text Sync iOS App
+
+## Project Overview
+Create an iOS application called "Sapients" that combines audio playback with synchronized text display and rich visual content. The app will serve as a multimedia content platform where users can listen to audio content while following along with synchronized text transcriptions and viewing associated images.
+
+## Core Features
+
+### 1. Audio Player Functionality
+- Play MP3 audio files stored in Supabase backend
+- Standard audio controls (play, pause, seek, progress tracking)
+- Real-time playback position tracking with 0.1-second precision
+- Automatic audio session management for iOS
+- Support for background audio playback
+- Time formatting and duration display
+
+### 2. Text Synchronization
+- Display text transcriptions synchronized with audio playback
+- Sentence-by-sentence highlighting based on current playback position
+- Click-to-seek functionality (tap on text to jump to that audio position)
+- Smooth visual transitions between highlighted sentences
+- Real-time text updates as audio progresses
+
+### 3. Image Display & Content Management
+- Display thumbnail images for audio content in list view
+- Show background/header images in detail view
+- Lazy loading of images with placeholder states
+- Support for various image formats through Supabase storage
+- Responsive image sizing and aspect ratio handling
+
+### 4. Backend Integration (Supabase)
+- Store audio files in Supabase storage buckets
+- Store image files in separate Supabase storage buckets
+- Content metadata management (titles, descriptions, timestamps)
+- Transcription data with precise timing information
+- Public URL generation for media assets
+- Real-time data synchronization
+
+### 5. Google Gemini AI Integration
+- Automatic audio transcription processing
+- Sentence-level timestamp generation
+- Backend processing pipeline for new content
+- AI-powered text segmentation and timing
+
+## Technical Requirements
+
+### Platform & Development
+- iOS 15.0+ minimum deployment target
+- SwiftUI framework for UI development
+- Swift programming language
+- Xcode development environment
+- AVFoundation for audio playback
+
+### Backend Infrastructure
+- Supabase as primary backend service
+- PostgreSQL database for metadata storage
+- Supabase Storage for file management
+- Row Level Security (RLS) policies
+- RESTful API integration
+
+### Database Schema
+- Content table: Store audio metadata (id, title, description, audio_url, image_url, created_at)
+- Transcriptions table: Store text segments with timing (id, content_id, text, start_time, end_time, created_at)
+- Public read access policies for content consumption
+
+### External APIs
+- Google Gemini API for audio transcription
+- Supabase Swift SDK for backend integration
+- AVFoundation for media playback
+
+## User Interface Requirements
+
+### Content List View
+- Grid/list display of available audio content
+- Thumbnail images with fallback icons
+- Content titles and descriptions
+- Search and filtering capabilities
+- Pull-to-refresh functionality
+
+### Content Detail View
+- Large header image display
+- Audio player controls with progress slider
+- Real-time transcription display
+- Synchronized text highlighting
+- Responsive layout for different screen sizes
+
+### Audio Player Component
+- Play/pause button with visual feedback
+- Progress slider with seek capability
+- Current time and total duration display
+- Loading states and error handling
+- Accessibility support
+
+## Content Management
+
+### Admin Interface
+- Supabase Studio for database management
+- File upload system for audio and images
+- Metadata entry and editing
+- Transcription review and correction
+
+### Content Processing Pipeline
+- Audio file upload and validation
+- Automatic transcription generation via Gemini API
+- Timestamp alignment and verification
+- Content publication workflow
+
+## Quality Assurance
+
+### Testing Requirements
+- Unit tests for audio player functionality
+- UI tests for user interaction flows
+- Integration tests for backend connectivity
+- Performance testing for large audio files
+- Accessibility testing compliance
+
+### Error Handling
+- Network connectivity issues
+- Audio playback failures
+- Image loading errors
+- Transcription synchronization problems
+- Backend service unavailability
+
+## Performance Requirements
+- Audio files up to 60 minutes in length
+- Smooth text synchronization with <100ms latency
+- Image loading within 2 seconds
+- App launch time under 3 seconds
+- Memory usage optimization for long audio sessions
+
+## Security & Privacy
+- Secure API key management
+- User data protection compliance
+- Content access controls
+- Secure file storage and transmission
+
+## Future Enhancements
+- User authentication and personalization
+- Offline content caching
+- Variable playback speed controls
+- Dark mode support
+- Advanced accessibility features
+- Analytics and usage tracking
+- Content bookmarking and favorites
+- Search functionality across transcriptions
+
+## Success Metrics
+- Successful audio playback rate >95%
+- Text synchronization accuracy >90%
+- Average session duration >10 minutes
+- User retention rate >60% after 7 days
+- App Store rating >4.0 stars
+
+## Timeline & Milestones
+- Phase 1: Core audio player and basic UI (4 weeks)
+- Phase 2: Text synchronization implementation (3 weeks)
+- Phase 3: Backend integration and content management (3 weeks)
+- Phase 4: Polish, testing, and App Store submission (2 weeks)
+
+## Technical Constraints
+- iOS App Store guidelines compliance
+- Supabase service limitations
+- Google Gemini API rate limits
+- Device storage considerations
+- Battery usage optimization 
