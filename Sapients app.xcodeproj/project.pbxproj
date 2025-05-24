@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		641DB4072DE14892001A2BE4 /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = 641DB4062DE14892001A2BE4 /* PostgREST */; };
+		641DB4092DE14892001A2BE4 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 641DB4082DE14892001A2BE4 /* Storage */; };
+		641DB40B2DE14892001A2BE4 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 641DB40A2DE14892001A2BE4 /* Supabase */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		641DB3DD2DE13EEC001A2BE4 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +58,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				641DB4092DE14892001A2BE4 /* Storage in Frameworks */,
+				641DB4072DE14892001A2BE4 /* PostgREST in Frameworks */,
+				641DB40B2DE14892001A2BE4 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +121,9 @@
 			);
 			name = "Sapients app";
 			packageProductDependencies = (
+				641DB4062DE14892001A2BE4 /* PostgREST */,
+				641DB4082DE14892001A2BE4 /* Storage */,
+				641DB40A2DE14892001A2BE4 /* Supabase */,
 			);
 			productName = "Sapients app";
 			productReference = 641DB3CF2DE13EEA001A2BE4 /* Sapients app.app */;
@@ -195,6 +207,9 @@
 			);
 			mainGroup = 641DB3C62DE13EEA001A2BE4;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				641DB4052DE14892001A2BE4 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 641DB3D02DE13EEA001A2BE4 /* Products */;
 			projectDirPath = "";
@@ -558,6 +573,35 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		641DB4052DE14892001A2BE4 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		641DB4062DE14892001A2BE4 /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 641DB4052DE14892001A2BE4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		641DB4082DE14892001A2BE4 /* Storage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 641DB4052DE14892001A2BE4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Storage;
+		};
+		641DB40A2DE14892001A2BE4 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 641DB4052DE14892001A2BE4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 641DB3C72DE13EEA001A2BE4 /* Project object */;
 }

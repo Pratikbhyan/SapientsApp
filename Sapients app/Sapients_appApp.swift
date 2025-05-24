@@ -11,7 +11,7 @@ import SwiftUI
 struct Sapients_appApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentListView()
         }
     }
 }
