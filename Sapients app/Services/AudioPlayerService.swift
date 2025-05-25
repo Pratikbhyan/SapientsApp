@@ -32,20 +32,45 @@ class AudioPlayerService: ObservableObject {
     
     // MARK: - Audio Loading
     func loadAudio(from url: URL) {
-        // Clean up previous player
         if let timeObserver = timeObserver, let player = player {
             player.removeTimeObserver(timeObserver)
+            self.timeObserver = nil // Clear the old observer
+        }
+        cancellables.forEach { $0.cancel() } // Cancel previous subscriptions
+        cancellables.removeAll()
+
+        // Reset state for new audio
+        DispatchQueue.main.async {
+            self.isPlaying = false
+            self.currentTime = 0
+            self.duration = 0
+            self.currentTranscriptionIndex = 0
         }
         
         playerItem = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: playerItem)
         
-        // Get duration
-        if let duration = playerItem?.asset.duration {
-            self.duration = CMTimeGetSeconds(duration)
+        // Get duration asynchronously
+        if let currentItem = playerItem {
+            Task {
+                do {
+                    let loadedDuration = try await currentItem.asset.load(.duration)
+                    DispatchQueue.main.async {
+                        self.duration = CMTimeGetSeconds(loadedDuration)
+                    }
+                } catch {
+                    print("Failed to load duration: \(error)")
+                    DispatchQueue.main.async {
+                        self.duration = 0
+                    }
+                }
+            }
+        } else {
+             DispatchQueue.main.async {
+                self.duration = 0
+            }
         }
         
-        // Add time observer
         timeObserver = player?.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
             queue: .main
@@ -54,13 +79,13 @@ class AudioPlayerService: ObservableObject {
             self.currentTime = CMTimeGetSeconds(time)
         }
         
-        // Listen for playback end
-        NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime)
+        NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: playerItem)
             .sink { [weak self] _ in
                 guard let self = self else { return }
                 self.isPlaying = false
-                self.currentTime = 0
+                self.currentTime = 0 // Or self.duration if you want it to stay at the end
                 self.player?.seek(to: CMTime.zero)
+                // self.currentTranscriptionIndex = 0 // Optionally reset transcription index
             }
             .store(in: &cancellables)
     }
@@ -90,12 +115,13 @@ class AudioPlayerService: ObservableObject {
     
     // MARK: - Transcription Sync
     func updateCurrentTranscription(transcriptions: [Transcription]) {
-        // Find the transcription that matches the current time
         for (index, transcription) in transcriptions.enumerated() {
             if currentTime >= TimeInterval(transcription.startTime) && 
                currentTime <= TimeInterval(transcription.endTime) {
-                currentTranscriptionIndex = index
-                break
+                if currentTranscriptionIndex != index { // Update only if changed
+                    currentTranscriptionIndex = index
+                }
+                break // Found the current one
             }
         }
     }
@@ -105,5 +131,6 @@ class AudioPlayerService: ObservableObject {
         if let timeObserver = timeObserver, let player = player {
             player.removeTimeObserver(timeObserver)
         }
+        cancellables.forEach { $0.cancel() }
     }
 } 

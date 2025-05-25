@@ -20,7 +20,7 @@ struct Sapients_appApp: App {
 
                 // Tab 2: Content List (Browse)
                 NavigationView {
-                    ContentListView()
+            ContentListView()
                 }
                 .tabItem {
                     Label("Browse", systemImage: "music.note.list")
