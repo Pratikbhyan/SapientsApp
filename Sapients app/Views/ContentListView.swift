@@ -52,7 +52,7 @@ struct ContentListView: View {
                     }
                 }
             }
-            .navigationTitle("Sapients")
+            .navigationTitle("Library")
             .navigationBarTitleDisplayMode(.large)
         }
         .task {

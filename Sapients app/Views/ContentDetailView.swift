@@ -9,9 +9,9 @@ enum FontSizePreset: CaseIterable, Identifiable {
 
     var size: CGFloat {
         switch self {
-        case .small: return 15.0
-        case .medium: return 18.0 // Current default
-        case .large: return 21.0
+        case .small: return 18
+        case .medium: return 20 // Current default
+        case .large: return 23
         }
     }
 
@@ -199,6 +199,9 @@ struct InitialView: View {
     @ObservedObject var repository: ContentRepository
     @ObservedObject var audioPlayer: AudioPlayerService // Keep if play button directly interacts
     var onPlayTapped: () -> Void
+
+    // spaceBelowTitleDate is no longer needed as the main spacer will be flexible.
+    @State private var paddingBelowDescription: CGFloat = 4.0 // Adjust for space between description and play button
     
     // To make text more readable on various images, add a subtle gradient overlay
     private var overlayGradient: LinearGradient {
@@ -215,91 +218,124 @@ struct InitialView: View {
     }
 
     var body: some View {
-        ZStack {
-            // 1. Full Screen Background Image
-            if let imageUrl = content.imageUrl,
-               let url = repository.getPublicURL(for: imageUrl, bucket: "images") {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable()
-                            .aspectRatio(contentMode: .fill) // Fill the screen
-                            // .edgesIgnoringSafeArea(.all) // Temporarily remove this
-                    case .failure(_):
-                        // Using the original gray placeholder for failure
-                        Rectangle().foregroundColor(Color.gray) 
-                            .edgesIgnoringSafeArea(.all)
-                            .overlay(Image(systemName: "photo.fill").foregroundColor(.white.opacity(0.7)))
-                    case .empty:
-                        // Using the original gray placeholder for empty
-                        Rectangle().foregroundColor(Color.gray) 
-                            .edgesIgnoringSafeArea(.all)
-                            .overlay(ProgressView())
-                    @unknown default:
-                        EmptyView()
+        ZStack { // New outermost ZStack to ensure GeometryReader gets full screen size
+            GeometryReader { geometry in
+            let screenHeight = geometry.size.height
+            let topSafeArea = geometry.safeAreaInsets.top
+            let bottomSafeArea = geometry.safeAreaInsets.bottom
+
+            // Define percentage-based paddings. Adjust these percentages as needed.
+            let titleTopPercentage: CGFloat = 0.05 // 5% of screen height from top safe area edge
+            let playButtonBottomPercentage: CGFloat = 0.12 // 12% of screen height from bottom safe area edge (allows space for tab bar)
+            
+            ZStack { // This is the main ZStack filling GeometryReader
+                // --- Background Layer (Image + Gradient) ---
+                ZStack {
+                    // Image part
+                    if let imageUrlString = content.imageUrl, // Assuming content.imageUrl is String?
+                       let imageURL = repository.getPublicURL(for: imageUrlString, bucket: "images") {
+                        AsyncImage(url: imageURL) { phase in
+                            switch phase {
+                            case .empty:
+                                // Placeholder for loading state - clear background lets gradient show
+                                Color.clear.overlay(ProgressView().scaleEffect(1.5))
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFill() // Ensures image fills its frame, maintaining aspect ratio
+                            case .failure(_):
+                                // Placeholder for failure state
+                                VStack {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .resizable().scaledToFit().frame(width: 40, height: 40)
+                                        .foregroundColor(.white.opacity(0.6))
+                                    Text("Image unavailable")
+                                        .font(.caption).foregroundColor(.white.opacity(0.6))
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity) // Center placeholder content
+                            @unknown default:
+                                EmptyView()
+                            }
+                        }
+                    } else {
+                        // Fallback if imageUrlString is nil or getPublicURL fails
+                        VStack {
+                            Image(systemName: "photo.on.rectangle.angled")
+                                .resizable().scaledToFit().frame(width: 40, height: 40)
+                                .foregroundColor(.white.opacity(0.6))
+                            Text("Image not found")
+                                .font(.caption).foregroundColor(.white.opacity(0.6))
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity) // Center placeholder content
                     }
+
+                    // Gradient overlay part (covers the image/placeholder)
+                    overlayGradient
                 }
-            } else {
-                // Fallback if no image URL
-                Rectangle().fill(Color.gray) // Or a default pattern/color
-                    .edgesIgnoringSafeArea(.all)
-            }
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .clipped() // Clip the entire background layer
 
-            // 2. Gradient Overlay for Text Readability
-            overlayGradient
-                .edgesIgnoringSafeArea(.all)
+                // --- Foreground Layer (Content Overlay) ---
+                VStack(spacing: 0) {
+                    // Top Section: Sapients & Date
+                    VStack {
+                        Text("Sapients")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.white)
+                        
+                        Text(currentDate)
+                            .font(.system(size: 28, weight: .medium))
+                            .foregroundColor(.white.opacity(0.85))
+                    }
+                    .padding(.top, topSafeArea + (screenHeight * titleTopPercentage))
+                    .frame(maxWidth: .infinity, alignment: .center)
 
-            // 3. Content Overlay (Sapients, Date, Description, Play Button)
-            VStack(spacing: 0) {
-                // Top Section: Sapients & Date (Centered)
-                VStack {
-                    Text("Sapients")
-                        .font(.system(size: 28, weight: .bold)) // Slightly smaller for overlay
-                        .foregroundColor(.white)
-                    
-                    Text(currentDate)
-                        .font(.system(size: 18, weight: .medium)) // Slightly smaller
-                        .foregroundColor(.white.opacity(0.85))
-                }
-                .padding(.top, (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first(where: { $0.isKeyWindow })?.safeAreaInsets.top ?? 15 + 10) // Safe area + extra padding
-                .frame(maxWidth: .infinity, alignment: .center) // Center horizontally
+                    Spacer() // Flexible spacer to push bottom content down
 
-                Spacer() // Pushes content to top and bottom
+                    // Bottom Group: Description & Play Button
+                    VStack(spacing: 0) {
+                        // Description
+                        VStack {
+                            Text(content.description ?? content.title ?? "No description available.")
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 30)
+                                .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 2)
+                        }
+                        .padding(.bottom, paddingBelowDescription) // Uses the @State variable
 
-                // Middle/Bottom Section: Description & Play Button
-                VStack(spacing: 20) {
-                    // Description Text (using content.title as placeholder if no description field)
-                    Text(content.description ?? content.title ?? "No description available.")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 30) // Give some horizontal margin
-                        .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 2) // Text shadow for readability
+                        // Play Button
+                        VStack {
+                            Button(action: onPlayTapped) {
+                                HStack {
+                                    Image(systemName: "play.fill")
+                                    Text("Play Episode")
+                                        .fontWeight(.semibold)
+                                }
+                                .padding(.vertical, 12)
+                                .padding(.horizontal, 30)
+                                .background(Color.white.opacity(0.25))
+                                .foregroundColor(.white)
+                                .cornerRadius(25)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 25)
+                                        .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                                )
+                            }
+                        }
+                    }
+                    .padding(.bottom, bottomSafeArea + (screenHeight * playButtonBottomPercentage))
+                    .frame(maxWidth: .infinity, alignment: .center)
 
-                    // Play Button
-                    Button(action: onPlayTapped) {
-                        HStack {
-                            Image(systemName: "play.fill")
-                            Text("Play Episode")
-                                .fontWeight(.semibold)
-                        } // Closes HStack for Play Button
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 30)
-                        .background(Color.white.opacity(0.25)) // Translucent button
-                        .foregroundColor(.white)
-                        .cornerRadius(25)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 25)
-                                .stroke(Color.white.opacity(0.5), lineWidth: 1) // Subtle border
-                        )
-                    } // Closes Play Button
-                } // Closes Middle/Bottom Section VStack (for description and play button)
-                .padding(.bottom, (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first(where: { $0.isKeyWindow })?.safeAreaInsets.bottom ?? 15 + 20) // Safe area + extra
-            } // Closes main Content Overlay VStack (for Sapients/Date and Middle/Bottom section)
-            .padding(.horizontal, 20) // Add horizontal padding to constrain content width
-            .edgesIgnoringSafeArea(.top) // Allow content to go into top safe area if needed
-        } // Closes ZStack (root of InitialView's body)
-        .foregroundColor(.white) // Default text color for ZStack children
+                } // Closes main Content Overlay VStack
+                .padding(.horizontal, 20) // Overall horizontal padding for the content overlay
+
+            } // Closes ZStack used for layering background and foreground
+        } // Closes GeometryReader
+    } // Closes new outermost ZStack
+    .edgesIgnoringSafeArea(.all)
+    .foregroundColor(.white)
     } // Closes body of InitialView
 } // Closes struct InitialView
 
