@@ -11,7 +11,21 @@ import SwiftUI
 struct Sapients_appApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentListView()
+            TabView {
+                // Tab 1: Now Playing (loads daily content)
+                DailyContentViewLoader()
+                    .tabItem {
+                        Label("Now Playing", systemImage: "play.circle.fill")
+                    }
+
+                // Tab 2: Content List (Browse)
+                NavigationView {
+                    ContentListView()
+                }
+                .tabItem {
+                    Label("Browse", systemImage: "music.note.list")
+                }
+            }
         }
     }
 }
