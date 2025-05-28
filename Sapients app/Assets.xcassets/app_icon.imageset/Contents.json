@@ -1,12 +1,11 @@
 {
   "images" : [
     {
-      "filename" : "loadingScreen.png",
+      "filename" : "app_icon.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
-      "filename" : "loadingScreen 1.png",
       "idiom" : "universal",
       "scale" : "2x"
     },
