@@ -201,7 +201,7 @@ struct InitialView: View {
     var onPlayTapped: () -> Void
 
     // spaceBelowTitleDate is no longer needed as the main spacer will be flexible.
-    @State private var paddingBelowDescription: CGFloat = 4.0 // Adjust for space between description and play button
+    @State private var paddingBelowDescription: CGFloat = 5.0 // Adjust for space between description and play button
     
     // To make text more readable on various images, add a subtle gradient overlay
     private var overlayGradient: LinearGradient {
@@ -279,6 +279,7 @@ struct InitialView: View {
                 VStack(spacing: 0) {
                     // Top Section: Sapients & Date
                     VStack {
+                        Spacer().frame(height:15)
                         Text("Sapients")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundColor(.white)
@@ -293,17 +294,18 @@ struct InitialView: View {
                     Spacer() // Flexible spacer to push bottom content down
 
                     // Bottom Group: Description & Play Button
-                    VStack(spacing: 0) {
+                    VStack(spacing: 5) {
                         // Description
                         VStack {
-                            Text(content.description ?? content.title ?? "No description available.")
+                            Text(content.description ?? content.title)
                                 .font(.system(size: 22, weight: .semibold))
                                 .foregroundColor(.white)
                                 .multilineTextAlignment(.center)
                                 .padding(.horizontal, 30)
-                                .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 2)
+                                .shadow(color: .black.opacity(0.4), radius: 2, x: 0, y: 2)
                         }
                         .padding(.bottom, paddingBelowDescription) // Uses the @State variable
+                        .padding(.bottom, paddingBelowDescription) // seUses the @State variable
 
                         // Play Button
                         VStack {
@@ -315,7 +317,7 @@ struct InitialView: View {
                                 }
                                 .padding(.vertical, 12)
                                 .padding(.horizontal, 30)
-                                .background(Color.white.opacity(0.25))
+                                .background(Color.white.opacity(0.45))
                                 .foregroundColor(.white)
                                 .cornerRadius(25)
                                 .overlay(
