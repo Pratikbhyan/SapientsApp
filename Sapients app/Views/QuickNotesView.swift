@@ -267,7 +267,7 @@ struct QuickNotesView: View {
 
 struct NoteSection: Codable, Identifiable {
     var id = UUID()
-    var date: Date
+    let date: Date
     var content: String
 }
 
