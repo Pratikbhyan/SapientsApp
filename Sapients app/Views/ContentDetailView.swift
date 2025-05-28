@@ -36,6 +36,11 @@ enum FontSizePreset: CaseIterable, Identifiable {
 
 struct ContentDetailView: View {
     let content: Content
+
+    init(content: Content) {
+        self.content = content
+        print("[DIAG] ContentDetailView init: Title - \(content.title)")
+    }
     
     @StateObject private var repository = ContentRepository()
     @StateObject private var audioPlayer = AudioPlayerService.shared
@@ -133,6 +138,12 @@ struct ContentDetailView: View {
         // but respect it for InitialView.
         .edgesIgnoringSafeArea(isPlayingViewActive ? .all : [])
         .preferredColorScheme(isPlayingViewActive ? .dark : nil)
+        .onAppear {
+            print("[DIAG] ContentDetailView ON_APPEAR: Title - \(content.title)")
+        }
+        .onDisappear {
+            print("[DIAG] ContentDetailView ON_DISAPPEAR: Title - \(content.title)")
+        }
     }
 }
 

@@ -22,8 +22,8 @@ struct Sapients_appApp: App {
                         }
 
                     // Tab 2: Content List (Browse)
-                    NavigationView {
-                        ContentListView()
+                    NavigationView { // This NavigationView is for the Library tab
+                        ContentListView() // ContentListView now correctly has no internal NavigationView
                     }
                     .tabItem {
                         Label("Library", systemImage: "music.note.list")

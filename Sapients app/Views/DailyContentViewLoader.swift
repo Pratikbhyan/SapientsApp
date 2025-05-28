@@ -78,4 +78,4 @@ struct DailyContentViewLoader: View {
 
 #Preview {
     DailyContentViewLoader()
-} 
+}

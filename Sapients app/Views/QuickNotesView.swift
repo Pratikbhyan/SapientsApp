@@ -184,7 +184,10 @@ struct QuickNotesView: View {
     }
     
     private func saveTodaysNote() {
-        UserDefaults.standard.set(noteText, forKey: "todayNoteText")
+        let currentNoteText = self.noteText // Capture value for the background task
+        DispatchQueue.global(qos: .background).async {
+            UserDefaults.standard.set(currentNoteText, forKey: "todayNoteText")
+        }
     }
     
     private func checkForNewDay() {
@@ -267,7 +270,7 @@ struct QuickNotesView: View {
 
 struct NoteSection: Codable, Identifiable {
     var id = UUID()
-    let date: Date
+    var date: Date
     var content: String
 }
 

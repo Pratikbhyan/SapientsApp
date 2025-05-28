@@ -8,8 +8,12 @@ struct ContentListView: View {
     @State private var quickNotesButtonOffsetX: CGFloat = -20 // From trailing edge
     @State private var quickNotesButtonOffsetY: CGFloat = -30 // From bottom edge
     
-    @State private var isQuickNotesActive = false // For NavigationLink activation
+    @State private var showingQuickNotesSheet = false // For .sheet presentation
     @StateObject private var repository = ContentRepository()
+
+    init() {
+        print("[DIAG] ContentListView INIT")
+    }
     
     enum Tab {
         case library
@@ -18,11 +22,12 @@ struct ContentListView: View {
     @State private var selectedTab: Tab = .library
     
     var body: some View {
-        // The NavigationView should remain the root for navigation to work correctly
-        // with the NavigationLink we're adding.
-        NavigationView {
-            ZStack(alignment: .bottomTrailing) { // ZStack to overlay button
-                VStack(spacing: 0) { // Main VStack for Picker and content area
+        let _ = print("[DIAG] ContentListView BODY")
+        // The NavigationView that was previously here has been removed.
+        // Sapients_appApp.swift (or the parent view) should provide the NavigationView.
+        
+        ZStack(alignment: .bottomTrailing) {
+            VStack(spacing: 0) {
                 Picker("Choose a section", selection: $selectedTab) {
                     Text("Library").tag(Tab.library)
                     Text("Favourites").tag(Tab.favourites)
@@ -31,15 +36,12 @@ struct ContentListView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 5)
 
-                Group { // Group to switch content based on tab
+                Group {
                     if selectedTab == .library {
-                        // Library content logic
-                        if repository.isLoading {
+                        if repository.isLoading && repository.contents.isEmpty {
                             ProgressView("Loading content...")
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        }
-                        // Removed the error display block
-                        else if repository.contents.isEmpty {
+                        } else if repository.contents.isEmpty {
                             VStack {
                                 Image(systemName: "music.note.list")
                                     .font(.largeTitle)
@@ -63,7 +65,6 @@ struct ContentListView: View {
                             }
                         }
                     } else if selectedTab == .favourites {
-                        // Favourites placeholder view
                         VStack {
                             Image(systemName: "heart.fill")
                                 .font(.largeTitle)
@@ -78,18 +79,12 @@ struct ContentListView: View {
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                } // End Group for tabbed content
-            } // End VStack for main content
-            .frame(maxWidth: .infinity, maxHeight: .infinity) // Ensure VStack takes available space
-
-            // Quick Notes Button
-            NavigationLink(destination: QuickNotesView(), isActive: $isQuickNotesActive) {
-                 EmptyView() // Invisible link, activated by button tap
-            }
-            .hidden()
+                } // End Group
+            } // End VStack
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             Button(action: {
-                isQuickNotesActive = true // Activate the NavigationLink
+                showingQuickNotesSheet = true
             }) {
                 HStack {
                     Image(systemName: "pencil")
@@ -98,35 +93,38 @@ struct ContentListView: View {
                 .font(.headline)
                 .padding()
                 .frame(width: quickNotesButtonWidth, height: quickNotesButtonHeight)
-                .background(Color(red: 135/255.0, green: 206/255.0, blue: 245/255.0, opacity: 0.9)) // Example background
+                .background(Color(red: 135/255.0, green: 206/255.0, blue: 245/255.0, opacity: 0.9))
                 .foregroundColor(.white)
                 .cornerRadius(quickNotesButtonCornerRadius)
                 .shadow(radius: 5)
             }
             .offset(x: quickNotesButtonOffsetX, y: quickNotesButtonOffsetY)
             
-            } // End ZStack
-        } // End NavigationView
-        // .task should ideally be on a view inside NavigationView if it's specific to its content,
-        // or on the NavigationView itself if it's for the whole navigation stack setup.
-        // Keeping it on NavigationView for now as per original structure.
-        .task { // .task modifier applied to NavigationView
-            await repository.fetchAllContent()
+        } // End ZStack
+        .sheet(isPresented: $showingQuickNotesSheet) {
+            QuickNotesView()
+        }
+        // Example: .navigationTitle("Library") // Set this in Sapients_appApp.swift on the NavigationView
+        .task {
+            if repository.contents.isEmpty {
+                 await repository.fetchAllContent()
+            }
+        }
+        .onAppear {
+            print("[DIAG] ContentListView ON_APPEAR (ZStack level)")
+        }
+        .onDisappear {
+            print("[DIAG] ContentListView ON_DISAPPEAR (ZStack level)")
         }
     }
 }
 
-// ContentRowView and ContentDetailView (if it exists) would remain unchanged.
-// ContentRepository would also remain unchanged in its core logic for fetching and error handling,
-// but the UI just won't display the error.
-
 struct ContentRowView: View {
     let content: Content
-    let repository: ContentRepository
+    @ObservedObject var repository: ContentRepository
     
     var body: some View {
         HStack {
-            // Thumbnail Image
             if let imageUrl = content.imageUrl,
                let url = repository.getPublicURL(for: imageUrl, bucket: "images") {
                 AsyncImage(url: url) { image in
@@ -136,10 +134,7 @@ struct ContentRowView: View {
                 } placeholder: {
                     Rectangle()
                         .foregroundColor(.gray.opacity(0.2))
-                        .overlay(
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        )
+                        .overlay(ProgressView().scaleEffect(0.8))
                 }
                 .frame(width: 60, height: 60)
                 .cornerRadius(8)
@@ -154,7 +149,6 @@ struct ContentRowView: View {
                     .cornerRadius(8)
             }
             
-            // Content Info
             VStack(alignment: .leading, spacing: 4) {
                 Text(content.title)
                     .font(.headline)
@@ -171,10 +165,7 @@ struct ContentRowView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            
             Spacer()
-            
-            // Play indicator
             Image(systemName: "play.circle")
                 .font(.title2)
                 .foregroundColor(.accentColor)
@@ -183,6 +174,12 @@ struct ContentRowView: View {
     }
 }
 
-#Preview {
-    ContentListView()
+#if DEBUG
+struct ContentListView_Previews: PreviewProvider {
+    static var previews: some View {
+        NavigationView { // Add NavigationView here for preview to work correctly
+            ContentListView()
+        }
+    }
 }
+#endif

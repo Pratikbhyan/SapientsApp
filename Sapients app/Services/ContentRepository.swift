@@ -33,7 +33,7 @@ class ContentRepository: ObservableObject {
     
     // MARK: - Transcription Operations
     func fetchTranscriptions(for contentId: UUID) async {
-        self.isLoading = true
+        // self.isLoading = true // Removed: ContentDetailView uses its own isLoadingTranscription state
         self.error = nil
         
         do {
@@ -46,10 +46,10 @@ class ContentRepository: ObservableObject {
                 .value
             
             self.transcriptions = response
-            self.isLoading = false
+            // self.isLoading = false // Removed
         } catch {
             self.error = error
-            self.isLoading = false
+            // self.isLoading = false // Removed, error state is sufficient here
         }
     }
     
@@ -60,10 +60,8 @@ class ContentRepository: ObservableObject {
     
     // MARK: - Daily Content Operations
     func fetchDailyContent() async throws -> Content? {
-        DispatchQueue.main.async {
-            self.isLoading = true 
-            self.error = nil
-        }
+        self.isLoading = true 
+        self.error = nil
 
         do {
             let response: [Content] = try await supabase
@@ -74,15 +72,11 @@ class ContentRepository: ObservableObject {
                 .execute()
                 .value
 
-            DispatchQueue.main.async {
-                self.isLoading = false
-            }
+            self.isLoading = false
             return response.first
         } catch {
-            DispatchQueue.main.async {
-                self.error = error
-                self.isLoading = false
-            }
+            self.error = error
+            self.isLoading = false
             throw error
         }
     }
