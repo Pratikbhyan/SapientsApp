@@ -13,6 +13,7 @@ class AudioPlayerService: ObservableObject {
     @Published var currentTime: TimeInterval = 0
     @Published var duration: TimeInterval = 0
     @Published var currentTranscriptionIndex: Int = 0
+    @Published var currentPlaybackRate: Float = 1.0
     
     private var cancellables = Set<AnyCancellable>()
     
@@ -22,12 +23,14 @@ class AudioPlayerService: ObservableObject {
     
     // MARK: - Audio Session Setup
     private func setupAudioSession() {
+        #if os(iOS) // AVAudioSession is only available on iOS, tvOS, watchOS
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("Failed to set up audio session: \(error)")
         }
+        #endif
     }
     
     // MARK: - Audio Loading
@@ -109,6 +112,31 @@ class AudioPlayerService: ObservableObject {
         }
     }
     
+    func setPlaybackRate(to rate: Float) {
+        guard let player = player else { return }
+        // Ensure the rate is valid (AVPlayer might have limits, e.g., 0.5 to 2.0 for some content)
+        // For now, we'll assume the provided rates are acceptable.
+        player.rate = rate
+        self.currentPlaybackRate = rate
+        // If the rate is > 0 and the player was paused, it will start playing.
+        // If the rate is 0, it will pause.
+        // Update isPlaying accordingly if the rate change affects play state.
+        if rate == 0.0 {
+            if self.isPlaying { // If it was playing and rate becomes 0, it's now paused.
+                self.isPlaying = false
+            }
+        } else {
+            if !self.isPlaying { // If it was paused and rate becomes > 0, it's now playing.
+                 // Check if player's current item is at end. If so, seek to beginning before playing.
+                if let currentItem = player.currentItem, currentItem.currentTime() >= currentItem.duration {
+                    player.seek(to: .zero)
+                    self.currentTime = 0 // Reflect seek in our published property
+                }
+                self.isPlaying = true
+            }
+        }
+    }
+
     func seek(to time: TimeInterval) {
         player?.seek(to: CMTime(seconds: time, preferredTimescale: 600))
     }

@@ -17,9 +17,13 @@ class ContentRepository: ObservableObject {
         self.error = nil
         
         do {
+            let now = ISO8601DateFormatter().string(from: Date())
+
             let response: [Content] = try await supabase
                 .from("content")
-                .select()
+                .select("id, title, description, audio_url, image_url, created_at, publish_on") // Explicitly select all needed columns including publish_on
+                .or("publish_on.lte.\(now),publish_on.is.null") // publish_on <= now OR publish_on IS NULL
+                .order("created_at", ascending: false) // Keep existing order or adjust as needed
                 .execute()
                 .value
             

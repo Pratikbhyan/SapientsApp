@@ -459,7 +459,7 @@ struct PlayingView: View {
 
             // Title has been removed as per request
 
-            DetailedAudioControls(audioPlayer: audioPlayer)
+            DetailedAudioControls(content: content, audioPlayer: audioPlayer)
                 .padding(.horizontal, 20) 
                 .padding(.bottom, (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first(where: { $0.isKeyWindow })?.safeAreaInsets.bottom ?? 8) 
         }
@@ -472,27 +472,30 @@ struct PlayingView: View {
 
 // MARK: - Detailed Audio Controls
 struct DetailedAudioControls: View {
+    let content: Content // To identify the content for favoriting
+    @State private var controlsOffsetX: CGFloat = 0 // For horizontal offset of the whole panel
+    // @State private var isFavorited: Bool = false // Replaced by FavoritesService
+    @StateObject private var favoritesService = FavoritesService.shared // Use StateObject here
     @ObservedObject var audioPlayer: AudioPlayerService
     @State private var sliderValue: Double = 0
-    @State private var isEditingSlider: Bool = false // To track slider drag state
-    @State private var justSeeked: Bool = false // Flag to manage post-seek currentTime updates
+    @State private var isEditingSlider: Bool = false
+    @State private var justSeeked: Bool = false
+
+    private let availableRates: [Float] = [0.75, 1.0, 1.25, 1.5, 2.0]
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 10) { // Main VStack for controls
             Slider(
-                value: $sliderValue, // Bind to local state
+                value: $sliderValue,
                 in: 0...max(audioPlayer.duration, 1),
                 onEditingChanged: { editing in
                     if editing {
                         isEditingSlider = true
-                        justSeeked = false // If user starts dragging again, clear the flag
+                        justSeeked = false
                     } else {
-                        // Editing ended.
-                        isEditingSlider = false // User is no longer in direct control of sliderValue
-                        audioPlayer.seek(to: sliderValue) // Tell player to seek
-                        justSeeked = true // Set flag: we just told the player to seek
-
-                        // Reset justSeeked after a short delay
+                        isEditingSlider = false
+                        audioPlayer.seek(to: sliderValue)
+                        justSeeked = true
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             justSeeked = false
                         }
@@ -502,55 +505,91 @@ struct DetailedAudioControls: View {
             .accentColor(.white.opacity(0.8))
             .padding(.vertical, 5)
             .onChange(of: audioPlayer.currentTime) { _, newTime in
-                // Update slider position when audioPlayer.currentTime changes externally
-                // Only if user is not dragging AND we haven't just initiated a seek
                 if !isEditingSlider && !justSeeked {
                     sliderValue = newTime
                 }
             }
             .onAppear {
-                // Initialize sliderValue when the view appears
                 sliderValue = audioPlayer.currentTime
             }
             
-            HStack {
-                Text(formatTime(sliderValue)) // Display based on sliderValue for consistent feedback
+            HStack { // Time labels
+                Text(formatTime(sliderValue))
                 Spacer()
                 Text(formatTime(audioPlayer.duration))
             }
             .font(.caption)
             .foregroundColor(.white.opacity(0.7))
             
-            HStack(spacing: 40) {
-                Button(action: { audioPlayer.seek(to: max(0, audioPlayer.currentTime - 10)) }) {
-                    Image(systemName: "gobackward.10")
+            // Outer HStack for centering playback controls and adding favorites button
+            HStack {
+                // Speed Control Menu
+                Menu {
+                    ForEach(availableRates, id: \.self) { rate in
+                        Button(action: {
+                            audioPlayer.setPlaybackRate(to: rate)
+                        }) {
+                            Text(String(format: "%.2fx", rate))
+                        }
+                    }
+                } label: {
+                    Text(String(format: "%.2fx", audioPlayer.currentPlaybackRate))
+                        .font(.caption)
+                        .padding(8)
+                        .background(Color.black.opacity(0.2))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .foregroundColor(.white)
+                }
+                .padding(.leading, 20) // Add some padding so it's not flush with the edge
+                Spacer() // Spacer between speed control and main playback buttons
+
+                // Inner HStack for the playback controls themselves
+                HStack(spacing: 40) {
+                    Button(action: { audioPlayer.seek(to: max(0, audioPlayer.currentTime - 10)) }) {
+                        Image(systemName: "gobackward.10")
+                            .font(.title2)
+                    }
+                    
+                    Button(action: { audioPlayer.togglePlayPause() }) {
+                        Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 58, height: 58)
+                    }
+                    
+                    Button(action: { audioPlayer.seek(to: min(audioPlayer.duration, audioPlayer.currentTime + 10)) }) {
+                        Image(systemName: "goforward.10")
+                            .font(.title2)
+                    }
+                } // <<< Closing brace for Inner Playback Controls HStack
+
+                Spacer() // Right spacer for centering / separating favorites
+
+                Button(action: {
+                    favoritesService.toggleFavorite(contentId: content.id)
+                    print("Favorite button tapped. Is favorited: \(favoritesService.isFavorite(contentId: content.id))")
+                }) {
+                    Image(systemName: favoritesService.isFavorite(contentId: content.id) ? "heart.fill" : "heart")
                         .font(.title2)
+                        .foregroundColor(favoritesService.isFavorite(contentId: content.id) ? .pink : .white)
                 }
-                
-                Button(action: { audioPlayer.togglePlayPause() }) {
-                    Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 58, height: 58)
-                }
-                
-                Button(action: { audioPlayer.seek(to: min(audioPlayer.duration, audioPlayer.currentTime + 10)) }) {
-                    Image(systemName: "goforward.10")
-                        .font(.title2)
-                }
-            }
-            .foregroundColor(.white.opacity(0.9))
-        }
-        .padding(.top, 20) // Apply desired top padding to the VStack
-        .padding(.bottom, 5) // Apply desired bottom padding to the VStack
-    }
+                .padding(.trailing, 20) // Keep favorite button from edge
+
+            } // End of Outer HStack
+            .foregroundColor(.white.opacity(0.9)) // Applied to Outer HStack
+            .offset(x: controlsOffsetX) // Applied to Outer HStack
+            
+        } // End of Main VStack
+        .padding(.top, 20)
+        .padding(.bottom, 5)
+    } // End of body
     
     private func formatTime(_ time: TimeInterval) -> String {
         let minutes = Int(time) / 60
         let seconds = Int(time) % 60
         return String(format: "%d:%02d", minutes, seconds)
     }
-} // <<< Closing brace for DetailedAudioControls struct
+} // End of DetailedAudioControls struct
 
 
 #if DEBUG
@@ -563,7 +602,8 @@ struct ContentDetailView_Previews_FinalLayout: PreviewProvider {
             description: "A Counterintuitive Approach to Living a Good Life",
             audioUrl: "sample.mp3", // These won't load in preview unless handled
             imageUrl: "sample.jpg", // These won't load in preview unless handled
-            createdAt: Date()
+            createdAt: Date(),
+            publishOn: nil
         )
         
         // Mock Repository for preview

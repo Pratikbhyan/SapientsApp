@@ -10,6 +10,7 @@ struct ContentListView: View {
     
     @State private var showingQuickNotesSheet = false // For .sheet presentation
     @StateObject private var repository = ContentRepository()
+    @StateObject private var favoritesService = FavoritesService.shared
 
     init() {
         print("[DIAG] ContentListView INIT")
@@ -20,6 +21,14 @@ struct ContentListView: View {
         case favourites
     }
     @State private var selectedTab: Tab = .library
+
+    private var filteredContents: [Content] {
+        if selectedTab == .library {
+            return repository.contents
+        } else {
+            return repository.contents.filter { favoritesService.isFavorite(contentId: $0.id) }
+        }
+    }
     
     var body: some View {
         let _ = print("[DIAG] ContentListView BODY")
@@ -55,7 +64,7 @@ struct ContentListView: View {
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         } else {
-                            List(repository.contents) { content in
+                            List(filteredContents) { content in // Use filteredContents here for Library tab too
                                 NavigationLink(destination: ContentDetailView(content: content)) {
                                     ContentRowView(content: content, repository: repository)
                                 }
@@ -65,19 +74,30 @@ struct ContentListView: View {
                             }
                         }
                     } else if selectedTab == .favourites {
-                        VStack {
-                            Image(systemName: "heart.fill")
-                                .font(.largeTitle)
-                                .foregroundColor(.pink)
-                            Text("Your Favourites")
-                                .font(.headline)
-                            Text("Content you mark as favourite will appear here.")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
+                        if filteredContents.isEmpty {
+                            VStack {
+                                Image(systemName: "heart.slash.fill") // Different icon for empty state
+                                    .font(.largeTitle)
+                                    .foregroundColor(.secondary)
+                                Text("No Favourites Yet")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                                Text("Tap the heart on an item to add it to your favourites.")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            List(filteredContents) { content in // Use filteredContents for Favourites tab
+                                NavigationLink(destination: ContentDetailView(content: content)) {
+                                    ContentRowView(content: content, repository: repository)
+                                }
+                            }
+                            // Optional: Add .refreshable here if you want to pull-to-refresh favorites,
+                            // though it might not be necessary if FavoritesService updates drive changes.
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 } // End Group
             } // End VStack
@@ -161,7 +181,7 @@ struct ContentRowView: View {
                         .lineLimit(3)
                 }
                 
-                Text(content.createdAt, style: .date)
+                Text(content.publishOn ?? content.createdAt, style: .date)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
