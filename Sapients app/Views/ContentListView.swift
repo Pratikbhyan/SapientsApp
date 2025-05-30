@@ -37,6 +37,19 @@ struct ContentListView: View {
         
         ZStack(alignment: .bottomTrailing) {
             VStack(spacing: 0) {
+                // Settings Button
+                HStack {
+                    Spacer()
+                    NavigationLink(destination: SettingsView()) {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(.accentColor)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+
                 StylishSegmentedControl(
                     selection: $selectedSegmentIndex,
                     items: [
@@ -141,7 +154,7 @@ struct ContentListView: View {
             
         } // End ZStack
         .sheet(isPresented: $showingQuickNotesSheet) {
-            QuickNotesView() // Placeholder for QuickNotesView
+            QuickNotesView()
         }
         .task {
             if repository.contents.isEmpty {

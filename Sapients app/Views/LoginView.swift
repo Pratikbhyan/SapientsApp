@@ -72,7 +72,7 @@ struct LoginView: View {
                         authViewModel.signInWithApple()
                     }
                     .disabled(authViewModel.isLoading)
-                    .padding(.bottom, 10) // Added bottom padding
+                    .padding(.bottom, 30) // Increased from 10 to 30 for more black space
                     } // End of else for isLoading
                 }
                 .padding(.horizontal, 24)
@@ -138,7 +138,7 @@ struct RoundedCorner: Shape {
 struct LoginView_Previews: PreviewProvider {
     static var previews: some View {
         LoginView()
-            .environmentObject(AuthManager()) // Inject AuthManager for preview
+            .environmentObject(AuthManager.shared) // Inject AuthManager for preview
             .environmentObject(AuthViewModel()) // AuthViewModel is still used locally by LoginView
     }
 }
@@ -153,7 +153,7 @@ struct LoginView_Previews: PreviewProvider {
 // The AuthButton struct was defined as:
 // struct AuthButton: View {
 //    var iconName: String? = nil
-//    var imageName: String? = nil 
+//    var imageName: String? = nil
 //    let text: String
 //    let backgroundColor: Color
 //    let textColor: Color
@@ -164,8 +164,8 @@ struct LoginView_Previews: PreviewProvider {
 // then AuthButton would need modification and LoginView would pass the binding to it.
 // For now, only the dedicated "Log in" button changes the state.
 
-// Note: For the Google logo, you'll need to add an image named "google_logo.png" (or similar) 
-// to your Xcode project's Asset Catalog (Assets.xcassets). 
+// Note: For the Google logo, you'll need to add an image named "google_logo.png" (or similar)
+// to your Xcode project's Asset Catalog (Assets.xcassets).
 // The provided HTML used a URL, but in SwiftUI, local assets are preferred for this.
 // You can find a Google logo SVG/PNG online and add it to your assets.
 // For Apple icon, SFSymbols "applelogo" is used.

@@ -4,6 +4,8 @@ import Supabase // This will require Supabase to be correctly linked
 
 @MainActor
 class AuthManager: ObservableObject {
+    static let shared = AuthManager()
+
     @Published var isAuthenticated = false
     @Published var user: User? // Supabase User model
 
@@ -12,7 +14,7 @@ class AuthManager: ObservableObject {
         SupabaseManager.shared.client
     }
 
-    init() {
+    private init() { // Made private to enforce singleton via .shared
         print("[AuthManager] Initializing and setting up auth state listener.")
         checkInitialAuthState() // Check session on init
         setupAuthListener()     // Start listening for changes
@@ -105,4 +107,17 @@ class AuthManager: ObservableObject {
 
     // Add other auth methods like signOut here if they should also update AuthManager's state
     // For example, the signOut from AuthViewModel could call a method here or AuthManager could handle signOut directly.
+
+    func signOut() async {
+        do {
+            try await supabase.auth.signOut()
+            // The authStateChanges listener in AuthManager should automatically update 
+            // isAuthenticated and user properties upon successful sign out.
+            print("[AuthManager] signOut() called, Supabase signOut attempted.")
+        } catch {
+            print("[AuthManager] Error during signOut: \(error.localizedDescription)")
+            // Even if signOut fails, ensure UI reflects an attempt or error state if necessary.
+            // However, authStateChanges should ideally handle the state based on Supabase events.
+        }
+    }
 }

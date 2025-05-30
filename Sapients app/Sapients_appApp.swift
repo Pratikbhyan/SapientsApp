@@ -12,7 +12,7 @@ import GoogleSignIn // Make sure this is imported
 
 @main
 struct Sapients_appApp: App {
-    @StateObject private var authManager = AuthManager()
+    @StateObject private var authManager = AuthManager.shared
 
     init() { // Add an init method
         configureGoogleSignIn()
