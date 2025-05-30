@@ -10,6 +10,10 @@
 		641DB4072DE14892001A2BE4 /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = 641DB4062DE14892001A2BE4 /* PostgREST */; };
 		641DB4092DE14892001A2BE4 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 641DB4082DE14892001A2BE4 /* Storage */; };
 		641DB40B2DE14892001A2BE4 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 641DB40A2DE14892001A2BE4 /* Supabase */; };
+		642C11062DE951FC0002C862 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 642C11052DE951FC0002C862 /* Kingfisher */; };
+		64C305C12DE7FE450046AEE0 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 64C305C02DE7FE450046AEE0 /* Auth */; };
+		64C305C42DE7FFCC0046AEE0 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 64C305C32DE7FFCC0046AEE0 /* GoogleSignIn */; };
+		64C305C62DE7FFCC0046AEE0 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 64C305C52DE7FFCC0046AEE0 /* GoogleSignInSwift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,8 +62,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				64C305C42DE7FFCC0046AEE0 /* GoogleSignIn in Frameworks */,
 				641DB4092DE14892001A2BE4 /* Storage in Frameworks */,
+				642C11062DE951FC0002C862 /* Kingfisher in Frameworks */,
 				641DB4072DE14892001A2BE4 /* PostgREST in Frameworks */,
+				64C305C62DE7FFCC0046AEE0 /* GoogleSignInSwift in Frameworks */,
+				64C305C12DE7FE450046AEE0 /* Auth in Frameworks */,
 				641DB40B2DE14892001A2BE4 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -87,6 +95,7 @@
 				641DB3D12DE13EEA001A2BE4 /* Sapients app */,
 				641DB3DF2DE13EEC001A2BE4 /* Sapients appTests */,
 				641DB3E92DE13EEC001A2BE4 /* Sapients appUITests */,
+				642486672DE80D3400CF10FD /* Frameworks */,
 				641DB3D02DE13EEA001A2BE4 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -99,6 +108,13 @@
 				641DB3E62DE13EEC001A2BE4 /* Sapients appUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		642486672DE80D3400CF10FD /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -124,6 +140,10 @@
 				641DB4062DE14892001A2BE4 /* PostgREST */,
 				641DB4082DE14892001A2BE4 /* Storage */,
 				641DB40A2DE14892001A2BE4 /* Supabase */,
+				64C305C02DE7FE450046AEE0 /* Auth */,
+				64C305C32DE7FFCC0046AEE0 /* GoogleSignIn */,
+				64C305C52DE7FFCC0046AEE0 /* GoogleSignInSwift */,
+				642C11052DE951FC0002C862 /* Kingfisher */,
 			);
 			productName = "Sapients app";
 			productReference = 641DB3CF2DE13EEA001A2BE4 /* Sapients app.app */;
@@ -209,6 +229,8 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				641DB4052DE14892001A2BE4 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				64C305C22DE7FFCC0046AEE0 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				642C11042DE951FC0002C862 /* XCRemoteSwiftPackageReference "Kingfisher" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 641DB3D02DE13EEA001A2BE4 /* Products */;
@@ -410,11 +432,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Sapients app/Sapients app.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = LHCC7W3H84;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Sapients-app-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Sapients;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -422,6 +446,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -440,11 +465,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Sapients app/Sapients app.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = LHCC7W3H84;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Sapients-app-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Sapients;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -452,6 +479,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -587,6 +615,22 @@
 				minimumVersion = 2.5.1;
 			};
 		};
+		642C11042DE951FC0002C862 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/onevcat/Kingfisher.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.3.2;
+			};
+		};
+		64C305C22DE7FFCC0046AEE0 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -604,6 +648,26 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 641DB4052DE14892001A2BE4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Supabase;
+		};
+		642C11052DE951FC0002C862 /* Kingfisher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 642C11042DE951FC0002C862 /* XCRemoteSwiftPackageReference "Kingfisher" */;
+			productName = Kingfisher;
+		};
+		64C305C02DE7FE450046AEE0 /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 641DB4052DE14892001A2BE4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		64C305C32DE7FFCC0046AEE0 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 64C305C22DE7FFCC0046AEE0 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		64C305C52DE7FFCC0046AEE0 /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 64C305C22DE7FFCC0046AEE0 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

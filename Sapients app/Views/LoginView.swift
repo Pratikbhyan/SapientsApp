@@ -1,7 +1,10 @@
 import SwiftUI
+import AuthenticationServices // For Sign In with Apple
+import UIKit // For UIApplication, UIRectCorner, UIBezierPath
 
 struct LoginView: View {
-    @Binding var isUserLoggedIn: Bool
+    @StateObject private var authViewModel = AuthViewModel()
+    @Binding var isUserLoggedIn: Bool // This will be updated by the authViewModel
 
     // Controls for logo size and position
     @State private var logoWidth: CGFloat = 400 // Adjust desired width here
@@ -29,31 +32,56 @@ struct LoginView: View {
 
                 // Buttons Container
                 VStack(spacing: 12) {
-                    AuthButton(iconName: "applelogo", text: "Continue with Apple", backgroundColor: .white, textColor: .black, action: {})
-                    
-                    AuthButton(imageName: "google_logo", text: "Continue with Google", backgroundColor: Color(white: 0.2), textColor: .white, action: {})
-                    
-                    AuthButton(iconName: "envelope.fill", text: "Sign up with email", backgroundColor: Color(white: 0.2), textColor: .white, action: {})
-                    
-                    Button(action: {
-                        // Log in action
-                        isUserLoggedIn = true // Simulate successful login
-                    }) {
-                        Text("Log in")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .foregroundColor(.white)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.gray.opacity(0.7), lineWidth: 1)
-                            )
-                    }
-                    .padding(.top, 12) // Extra space before Log in button
 
+                    if let errorMessage = authViewModel.errorMessage {
+                        Text(errorMessage)
+                            .foregroundColor(.red)
+                            .font(.caption)
+                            .padding(.vertical, 5)
+                    }
+
+                    if authViewModel.isLoading {
+                        ProgressView()
+                            .padding(.vertical, 10)
+                    } else {
+                                        // Sign In with Apple Button
+                                        AuthButton(imageName: "google_logo", text: "Continue with Google", backgroundColor: Color(white: 0.2), textColor: .white, action: {
+                        Task {
+                            let success = await authViewModel.signInWithGoogle() // Capture the result
+                            if success {                                         // Check the result
+                                self.isUserLoggedIn = true                       // Update the View's @Binding
+                            }
+                        }
+                    })
+                    
+                    SignInWithAppleButton(
+                        onRequest: { request in
+                            // This part is handled by the AuthViewModel's signInWithApple method
+                            // when it creates and performs the request.
+                            // We just need to trigger the AuthViewModel's method.
+                        },
+                        onCompletion: { result in
+                            // This completion is for the button's action,
+                            // The actual token handling and Supabase call is in AuthViewModel's delegate methods.
+                            // We can check authViewModel.isUserLoggedIn here if needed.
+                            if authViewModel.isUserLoggedIn {
+                                self.isUserLoggedIn = true
+                            }
+                        }
+                    )
+                    .signInWithAppleButtonStyle(.white) // Or .black, .whiteOutline
+                    .frame(height: 50) // Standard height
+                    .cornerRadius(10)
+                    .onTapGesture { // Use onTapGesture to call our ViewModel method
+                        authViewModel.signInWithApple()
+                    }
+                    .disabled(authViewModel.isLoading)
+                    .padding(.bottom, 10) // Added bottom padding
+                    } // End of else for isLoading
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 30)
-                .padding(.bottom, UIApplication.shared.windows.first?.safeAreaInsets.bottom ?? 0 > 0 ? 30 : 15) // Adjust bottom padding based on safe area
+                .padding(.bottom, (UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene)?.windows.first(where: { $0.isKeyWindow })?.safeAreaInsets.bottom ?? 0 > 0 ? 30 : 15) // Adjust bottom padding based on safe area
                 .background(Color.black)
                 .clipShape(RoundedCorner(radius: 30, corners: [.topLeft, .topRight]))
             }
@@ -114,6 +142,7 @@ struct RoundedCorner: Shape {
 struct LoginView_Previews: PreviewProvider {
     static var previews: some View {
         LoginView(isUserLoggedIn: .constant(false))
+            .environmentObject(AuthViewModel()) // Add for preview if needed, though direct init is fine
     }
 }
 
