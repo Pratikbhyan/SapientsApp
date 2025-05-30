@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 import Combine
 
+@MainActor
 class AudioPlayerService: ObservableObject {
     static let shared = AudioPlayerService()
     
@@ -78,8 +79,10 @@ class AudioPlayerService: ObservableObject {
             forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
-            guard let self = self else { return }
-            self.currentTime = CMTimeGetSeconds(time)
+            guard let strongSelf = self else { return }
+            Task { @MainActor in
+                strongSelf.currentTime = CMTimeGetSeconds(time)
+            }
         }
         
         NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime, object: playerItem)

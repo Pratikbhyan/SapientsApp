@@ -606,8 +606,7 @@ struct ContentDetailView_Previews_FinalLayout: PreviewProvider {
             publishOn: nil
         )
         
-        // Mock Repository for preview
-        let mockRepo = ContentRepository()
+        // Mock Repository for preview (instance not directly used here as ContentDetailView creates its own)
         // Example of populating mock transcriptions for previewing PlayingView
         // mockRepo.transcriptions = [
         //     Transcription(id: UUID(), contentId: mockContent.id, text: "This is a sample transcription line, make it long enough to test wrapping and visual appeal.", startTime: 0, endTime: 5, createdAt: Date()),

@@ -4,7 +4,7 @@ import UIKit // For UIApplication, UIRectCorner, UIBezierPath
 
 struct LoginView: View {
     @StateObject private var authViewModel = AuthViewModel()
-    @Binding var isUserLoggedIn: Bool // This will be updated by the authViewModel
+    @EnvironmentObject var authManager: AuthManager // Use AuthManager from environment
 
     // Controls for logo size and position
     @State private var logoWidth: CGFloat = 400 // Adjust desired width here
@@ -47,10 +47,8 @@ struct LoginView: View {
                                         // Sign In with Apple Button
                                         AuthButton(imageName: "google_logo", text: "Continue with Google", backgroundColor: Color(white: 0.2), textColor: .white, action: {
                         Task {
-                            let success = await authViewModel.signInWithGoogle() // Capture the result
-                            if success {                                         // Check the result
-                                self.isUserLoggedIn = true                       // Update the View's @Binding
-                            }
+                            // AuthManager will automatically update the isAuthenticated state upon successful Supabase sign-in.
+                            _ = await authViewModel.signInWithGoogle()
                         }
                     })
                     
@@ -63,10 +61,8 @@ struct LoginView: View {
                         onCompletion: { result in
                             // This completion is for the button's action,
                             // The actual token handling and Supabase call is in AuthViewModel's delegate methods.
-                            // We can check authViewModel.isUserLoggedIn here if needed.
-                            if authViewModel.isUserLoggedIn {
-                                self.isUserLoggedIn = true
-                            }
+                            // AuthManager will automatically update the isAuthenticated state upon successful Supabase sign-in.
+                            // The result of Apple Sign-In is handled within AuthViewModel and its delegate methods.
                         }
                     )
                     .signInWithAppleButtonStyle(.white) // Or .black, .whiteOutline
@@ -141,8 +137,9 @@ struct RoundedCorner: Shape {
 
 struct LoginView_Previews: PreviewProvider {
     static var previews: some View {
-        LoginView(isUserLoggedIn: .constant(false))
-            .environmentObject(AuthViewModel()) // Add for preview if needed, though direct init is fine
+        LoginView()
+            .environmentObject(AuthManager()) // Inject AuthManager for preview
+            .environmentObject(AuthViewModel()) // AuthViewModel is still used locally by LoginView
     }
 }
 

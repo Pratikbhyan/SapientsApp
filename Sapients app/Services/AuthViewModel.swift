@@ -9,7 +9,7 @@ import CryptoKit // For SHA256 hashing
 class AuthViewModel: NSObject, ObservableObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
     @Published var isLoading = false
     @Published var errorMessage: String?
-    @Published var isUserLoggedIn = false // This could be tied to a global app state
+    // @Published var isUserLoggedIn = false // This state is now managed by AuthManager
 
     private var supabase: SupabaseClient {
         SupabaseManager.shared.client
@@ -96,7 +96,7 @@ class AuthViewModel: NSObject, ObservableObject, ASAuthorizationControllerDelega
             errorMessage = nil
             do {
                 try await supabase.auth.signInWithIdToken(credentials: .init(provider: .apple, idToken: idTokenString, nonce: nonce))
-                self.isUserLoggedIn = true
+                // self.isUserLoggedIn = true // AuthManager handles this state change
                 print("Successfully signed in with Apple.")
             } catch {
                 print("Error signing in with Apple via Supabase: \(error.localizedDescription)")
@@ -165,7 +165,7 @@ class AuthViewModel: NSObject, ObservableObject, ASAuthorizationControllerDelega
                 try await supabase.auth.signInWithIdToken(credentials: .init(provider: .google, idToken: idToken, nonce: nil))
                 
                 print("Successfully signed in with Google.")
-                self.isUserLoggedIn = true // This will publish the change
+                // self.isUserLoggedIn = true // AuthManager handles this state change
                 self.isLoading = false
                 return true // Return true on success
             } catch {
@@ -182,9 +182,10 @@ class AuthViewModel: NSObject, ObservableObject, ASAuthorizationControllerDelega
         isLoading = true
         errorMessage = nil
         do {
-            try await supabase.auth.signOut()
-            isUserLoggedIn = false
-            print("Successfully signed out.")
+            try await supabase.auth.signOut() // Sign out from Supabase
+            GIDSignIn.sharedInstance.signOut() // Sign out from Google
+            // isUserLoggedIn = false // AuthManager handles this state change
+            print("Successfully signed out from Supabase and Google.")
         } catch {
             print("Error signing out: \(error.localizedDescription)")
             errorMessage = error.localizedDescription

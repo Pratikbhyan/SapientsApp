@@ -1,6 +1,6 @@
 import Foundation
 
-struct Content: Identifiable, Codable {
+struct Content: Identifiable, Codable, Equatable {
     let id: UUID
     let title: String
     let description: String?
@@ -9,6 +9,10 @@ struct Content: Identifiable, Codable {
     let createdAt: Date
     let publishOn: Date? // New field, make it optional
     
+    var effectiveSortDate: Date {
+        return publishOn ?? createdAt
+    }
+
     enum CodingKeys: String, CodingKey {
         case id
         case title

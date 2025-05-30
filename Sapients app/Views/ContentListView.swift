@@ -20,30 +20,35 @@ struct ContentListView: View {
         case library
         case favourites
     }
-    @State private var selectedTab: Tab = .library
+    @State private var selectedTab: Tab = .library // Keep this for logic
+    @State private var selectedSegmentIndex: Int = 0 // 0 for Library, 1 for Favourites
 
     private var filteredContents: [Content] {
+        let allContents = repository.contents
         if selectedTab == .library {
-            return repository.contents
+            return allContents.sorted { $0.effectiveSortDate < $1.effectiveSortDate }
         } else {
-            return repository.contents.filter { favoritesService.isFavorite(contentId: $0.id) }
+            return allContents.filter { favoritesService.isFavorite(contentId: $0.id) }.sorted { $0.effectiveSortDate < $1.effectiveSortDate }
         }
     }
     
     var body: some View {
         let _ = print("[DIAG] ContentListView BODY")
-        // The NavigationView that was previously here has been removed.
-        // Sapients_appApp.swift (or the parent view) should provide the NavigationView.
         
         ZStack(alignment: .bottomTrailing) {
             VStack(spacing: 0) {
-                Picker("Choose a section", selection: $selectedTab) {
-                    Text("Library").tag(Tab.library)
-                    Text("Favourites").tag(Tab.favourites)
-                }
-                .pickerStyle(.segmented)
+                StylishSegmentedControl(
+                    selection: $selectedSegmentIndex,
+                    items: [
+                        (icon: nil, title: "Library"),
+                        (icon: nil, title: "Favourites")
+                    ]
+                )
                 .padding(.horizontal)
-                .padding(.bottom, 5)
+                .padding(.bottom, 10)
+                .onChange(of: selectedSegmentIndex) { _, newIndex in
+                    selectedTab = (newIndex == 0) ? .library : .favourites
+                }
 
                 Group {
                     if selectedTab == .library {
@@ -64,19 +69,33 @@ struct ContentListView: View {
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         } else {
-                            List(filteredContents) { content in // Use filteredContents here for Library tab too
-                                NavigationLink(destination: ContentDetailView(content: content)) {
-                                    ContentRowView(content: content, repository: repository)
+                            ScrollViewReader { scrollViewProxy in
+                                List(filteredContents) { content in
+                                    NavigationLink(destination: ContentDetailView(content: content)) {
+                                        ContentRowView(content: content, repository: repository)
+                                    }
                                 }
-                            }
-                            .refreshable {
-                                await repository.fetchAllContent()
-                            }
+                                .refreshable {
+                                    await repository.fetchAllContent()
+                                }
+                                .onAppear {
+                                    if let lastItem = filteredContents.last {
+                                        scrollViewProxy.scrollTo(lastItem.id, anchor: .bottom)
+                                    }
+                                }
+                                .onChange(of: filteredContents) { _, newContents in
+                                    if let lastItem = newContents.last {
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                            scrollViewProxy.scrollTo(lastItem.id, anchor: .bottom)
+                                        }
+                                    }
+                                }
+                            } // End ScrollViewReader
                         }
                     } else if selectedTab == .favourites {
                         if filteredContents.isEmpty {
                             VStack {
-                                Image(systemName: "heart.slash.fill") // Different icon for empty state
+                                Image(systemName: "heart.slash.fill")
                                     .font(.largeTitle)
                                     .foregroundColor(.secondary)
                                 Text("No Favourites Yet")
@@ -90,16 +109,16 @@ struct ContentListView: View {
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         } else {
-                            List(filteredContents) { content in // Use filteredContents for Favourites tab
+                            List(filteredContents) { content in
                                 NavigationLink(destination: ContentDetailView(content: content)) {
                                     ContentRowView(content: content, repository: repository)
                                 }
                             }
-                            // Optional: Add .refreshable here if you want to pull-to-refresh favorites,
-                            // though it might not be necessary if FavoritesService updates drive changes.
                         }
                     }
                 } // End Group
+                .listStyle(.plain) // Apply listStyle to the Group
+                 
             } // End VStack
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -122,9 +141,8 @@ struct ContentListView: View {
             
         } // End ZStack
         .sheet(isPresented: $showingQuickNotesSheet) {
-            QuickNotesView()
+            QuickNotesView() // Placeholder for QuickNotesView
         }
-        // Example: .navigationTitle("Library") // Set this in Sapients_appApp.swift on the NavigationView
         .task {
             if repository.contents.isEmpty {
                  await repository.fetchAllContent()
@@ -144,18 +162,17 @@ struct ContentRowView: View {
     @ObservedObject var repository: ContentRepository
     
     var body: some View {
+        let _ = print("[ContentRowView] Content ID: \(content.id), Title: \(content.title), Image URL String: \(content.imageUrl ?? "nil")") // DIAGNOSTIC
         HStack {
-            if let imageUrl = content.imageUrl,
-               let url = repository.getPublicURL(for: imageUrl, bucket: "images") {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Rectangle()
-                        .foregroundColor(.gray.opacity(0.2))
-                        .overlay(ProgressView().scaleEffect(0.8))
+            if let imageUrlString = content.imageUrl,
+               let imageURL = repository.getPublicURL(for: imageUrlString, bucket: "images") {
+                    let _ = print("[ContentRowView] Generated Public URL for \(imageUrlString): \(imageURL)") // DIAGNOSTIC
+                CachedAsyncImage(url: imageURL) {
+                    // This is the placeholder view from CachedAsyncImage
+                    DefaultPlaceholder()
+                        .frame(width: 60, height: 60) // Apply frame to placeholder as well
                 }
+                .aspectRatio(contentMode: .fill) // Apply to the image if loaded
                 .frame(width: 60, height: 60)
                 .cornerRadius(8)
                 .clipped()
@@ -203,3 +220,64 @@ struct ContentListView_Previews: PreviewProvider {
     }
 }
 #endif
+
+// Definition for the StylishSegmentedControl
+fileprivate struct StylishSegmentedControlItem: Identifiable {
+    let id = UUID()
+    let icon: String?
+    let title: String
+}
+
+// Updated StylishSegmentedControl with centered pill design
+fileprivate struct StylishSegmentedControl: View {
+    @Binding var selection: Int
+    let items: [StylishSegmentedControlItem]
+    @Namespace private var animation
+
+    init(selection: Binding<Int>, items: [(icon: String?, title: String)]) {
+        self._selection = selection
+        self.items = items.map { StylishSegmentedControlItem(icon: $0.icon, title: $0.title) }
+    }
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(items.indices, id: \.self) { index in
+                Button(action: {
+                    withAnimation(.interactiveSpring(response: 0.3, dampingFraction: 0.7, blendDuration: 0.1)) {
+                        selection = index
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        if let iconName = items[index].icon {
+                            Image(systemName: iconName)
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        Text(items[index].title)
+                            .font(.system(size: 15, weight: .medium))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .padding(.horizontal, 16)
+                    .foregroundColor(selection == index ? .white : .primary)
+                    .background(
+                        ZStack {
+                            if selection == index {
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(Color(red: 135/255.0, green: 206/255.0, blue: 235/255.0)) // Sky blueish color
+                                    .matchedGeometryEffect(id: "selectedBackground", in: animation)
+                            }
+                        }
+                    )
+                }
+                .buttonStyle(PlainButtonStyle()) // Remove default button styling
+            }
+        }
+        .padding(4) // Padding inside the overall container
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color(uiColor: .systemGray6))
+                .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+        )
+        .frame(maxWidth: 280) // Constrain width to center it better
+    }
+}

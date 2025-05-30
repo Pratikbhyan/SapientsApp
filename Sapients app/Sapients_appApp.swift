@@ -12,7 +12,7 @@ import GoogleSignIn // Make sure this is imported
 
 @main
 struct Sapients_appApp: App {
-    @State private var isUserLoggedIn: Bool = false // Or load from Keychain/UserDefaults
+    @StateObject private var authManager = AuthManager()
 
     init() { // Add an init method
         configureGoogleSignIn()
@@ -21,7 +21,7 @@ struct Sapients_appApp: App {
     var body: some Scene {
         WindowGroup {
             Group { // Grouping the conditional content to apply .onOpenURL
-                if isUserLoggedIn {
+                if authManager.isAuthenticated {
                     TabView {
                         // Tab 1: Now Playing (loads daily content)
                         DailyContentViewLoader()
@@ -38,28 +38,23 @@ struct Sapients_appApp: App {
                         }
                     } // Closes TabView
                 } else {
-                    LoginView(isUserLoggedIn: $isUserLoggedIn)
+                    LoginView()
                 }
             }
+            .environmentObject(authManager) // Pass AuthManager to the environment
             .onOpenURL { url in
                 Task {
                     do {
                         // Let Supabase process the URL (e.g., extract tokens, set session)
                         try await SupabaseManager.shared.client.auth.session(from: url)
                         
-                        // After Supabase processes it, check the current session state
-                        // to update the app's login status.
-                        let currentSession = try? await SupabaseManager.shared.client.auth.session
-                        self.isUserLoggedIn = (currentSession != nil && currentSession?.user != nil)
-                        
-                        if self.isUserLoggedIn {
-                            print("Deep link processed, user is logged in via onOpenURL.")
-                        } else {
-                            print("Deep link processed via onOpenURL, but no active session found.")
-                        }
+                        // AuthManager's authStateChanges listener should automatically update the isAuthenticated state.
+                        // If direct re-check is needed after processing URL, you could call:
+                        // await authManager.checkInitialAuthState()
+                        print("Deep link processed by Supabase via onOpenURL. AuthManager will handle state update.")
                     } catch {
                         print("Error processing deeplink in onOpenURL: \(error.localizedDescription)")
-                        self.isUserLoggedIn = false // Ensure logged out state on error
+                        // AuthManager should also reflect this error if the session becomes invalid or nil.
                     }
                 }
             }

@@ -11,6 +11,8 @@
 		641DB4092DE14892001A2BE4 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 641DB4082DE14892001A2BE4 /* Storage */; };
 		641DB40B2DE14892001A2BE4 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 641DB40A2DE14892001A2BE4 /* Supabase */; };
 		642C11062DE951FC0002C862 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 642C11052DE951FC0002C862 /* Kingfisher */; };
+		642C11132DE975A00002C862 /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = 642C11122DE975A00002C862 /* Functions */; };
+		642C11152DE975A00002C862 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = 642C11142DE975A00002C862 /* Realtime */; };
 		64C305C12DE7FE450046AEE0 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 64C305C02DE7FE450046AEE0 /* Auth */; };
 		64C305C42DE7FFCC0046AEE0 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 64C305C32DE7FFCC0046AEE0 /* GoogleSignIn */; };
 		64C305C62DE7FFCC0046AEE0 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 64C305C52DE7FFCC0046AEE0 /* GoogleSignInSwift */; };
@@ -62,8 +64,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				642C11152DE975A00002C862 /* Realtime in Frameworks */,
 				64C305C42DE7FFCC0046AEE0 /* GoogleSignIn in Frameworks */,
 				641DB4092DE14892001A2BE4 /* Storage in Frameworks */,
+				642C11132DE975A00002C862 /* Functions in Frameworks */,
 				642C11062DE951FC0002C862 /* Kingfisher in Frameworks */,
 				641DB4072DE14892001A2BE4 /* PostgREST in Frameworks */,
 				64C305C62DE7FFCC0046AEE0 /* GoogleSignInSwift in Frameworks */,
@@ -144,6 +148,8 @@
 				64C305C32DE7FFCC0046AEE0 /* GoogleSignIn */,
 				64C305C52DE7FFCC0046AEE0 /* GoogleSignInSwift */,
 				642C11052DE951FC0002C862 /* Kingfisher */,
+				642C11122DE975A00002C862 /* Functions */,
+				642C11142DE975A00002C862 /* Realtime */,
 			);
 			productName = "Sapients app";
 			productReference = 641DB3CF2DE13EEA001A2BE4 /* Sapients app.app */;
@@ -653,6 +659,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 642C11042DE951FC0002C862 /* XCRemoteSwiftPackageReference "Kingfisher" */;
 			productName = Kingfisher;
+		};
+		642C11122DE975A00002C862 /* Functions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 641DB4052DE14892001A2BE4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Functions;
+		};
+		642C11142DE975A00002C862 /* Realtime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 641DB4052DE14892001A2BE4 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Realtime;
 		};
 		64C305C02DE7FE450046AEE0 /* Auth */ = {
 			isa = XCSwiftPackageProductDependency;

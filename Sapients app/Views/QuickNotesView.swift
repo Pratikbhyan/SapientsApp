@@ -9,6 +9,9 @@ struct QuickNotesView: View {
     @State private var selectedSectionForDeletion: NoteSection?
     @State private var showingDeleteConfirmation: Bool = false
     @State private var hasInitialized: Bool = false // Prevent duplicate initialization
+    @State private var keyboardHeight: CGFloat = 0 // Track keyboard height
+    @State private var scrollViewContentHeight: CGFloat = 0 // Track content height
+    @State private var scrollViewFrameHeight: CGFloat = 0 // Track visible frame height
     
     private let skyBlue = Color(red: 135/255.0, green: 206/255.0, blue: 235/255.0)
     private let noteSectionsFileName = "noteSections.json"
@@ -35,90 +38,163 @@ struct QuickNotesView: View {
             
             // Main content area
             ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                        // Previous notes sections (sorted chronologically - newest first)
-                        ForEach($noteSections.sorted(by: { $0.date.wrappedValue > $1.date.wrappedValue })) { $section in
-                            Section {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    TextEditor(text: $section.content)
-                                        .frame(minHeight: 50)
-                                        .padding(.horizontal, 20)
-                                        .padding(.vertical, 10)
-                                        .onChange(of: section.content) {
-                                            saveNoteSections()
-                                        }
+                GeometryReader { geometry in
+                    ScrollView {
+                        LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                            // Previous notes sections (sorted chronologically - newest first)
+                            ForEach($noteSections.sorted(by: { $0.date.wrappedValue > $1.date.wrappedValue })) { $section in
+                                Section {
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        TextEditor(text: $section.content)
+                                            .frame(minHeight: 50)
+                                            .padding(.horizontal, 20)
+                                            .padding(.vertical, 10)
+                                            .onChange(of: section.content) {
+                                                saveNoteSections()
+                                            }
+                                    }
+                                    .background(Color(UIColor.secondarySystemBackground).opacity(0.5))
+                                } header: {
+                                    HStack {
+                                        Text(formatDate(section.date))
+                                            .font(.headline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.gray)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 8)
+                                    .background(Color(UIColor.systemBackground))
+                                    .contentShape(Rectangle())
+                                    .onLongPressGesture {
+                                        selectedSectionForDeletion = section
+                                        showingDeleteConfirmation = true
+                                    }
                                 }
-                                .background(Color(UIColor.secondarySystemBackground).opacity(0.5))
+                            }
+                            
+                            // Today's section
+                            Section {
+                                ZStack(alignment: .topLeading) {
+                                    TextEditor(text: $noteText)
+                                        .frame(minHeight: 200, maxHeight: .infinity)
+                                        .padding(.horizontal, 20)
+                                        .padding(.bottom, 20) // Fixed padding instead of dynamic
+                                        .focused($isTextEditorFocused)
+                                        .onChange(of: noteText) {
+                                            isEditing = true
+                                            saveTodaysNote()
+                                            
+                                            // Only auto-scroll if content might be hidden behind keyboard
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                                if shouldScrollToBottom(availableHeight: geometry.size.height) {
+                                                    withAnimation(.easeOut(duration: 0.3)) {
+                                                        proxy.scrollTo("today-bottom", anchor: .bottom)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        .onTapGesture {
+                                            isEditing = true
+                                        }
+                                    
+                                    // Invisible anchor point at the bottom of the text editor
+                                    VStack {
+                                        Spacer()
+                                        HStack {
+                                            Spacer()
+                                        }
+                                        .frame(height: 1)
+                                        .id("today-bottom")
+                                    }
+                                }
+                                
                             } header: {
                                 HStack {
-                                    Text(formatDate(section.date))
+                                    Text("Today - \(formatDate(Date()))")
                                         .font(.headline)
                                         .fontWeight(.semibold)
                                         .foregroundColor(.gray)
                                     Spacer()
+                                    
+                                    // Clear button for today's notes
+                                    if !noteText.isEmpty {
+                                        Button(action: clearTodaysNotes) {
+                                            Image(systemName: "trash")
+                                                .foregroundColor(.red)
+                                                .font(.caption)
+                                        }
+                                        .buttonStyle(BorderlessButtonStyle())
+                                    }
                                 }
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 8)
                                 .background(Color(UIColor.systemBackground))
-                                .contentShape(Rectangle())
-                                .onLongPressGesture {
-                                    selectedSectionForDeletion = section
-                                    showingDeleteConfirmation = true
-                                }
+                                .id("today")
                             }
                         }
-                        
-                        // Today's section
-                        Section {
-                            TextEditor(text: $noteText)
-                                .frame(minHeight: 200, maxHeight: .infinity)
-                                .padding(.horizontal, 20)
-                                .padding(.bottom, 20)
-                                .focused($isTextEditorFocused)
-                                .onChange(of: noteText) {
-                                    isEditing = true
-                                    saveTodaysNote()
+                        .background(
+                            GeometryReader { contentGeometry in
+                                Color.clear.onAppear {
+                                    scrollViewContentHeight = contentGeometry.size.height
                                 }
-                                .onTapGesture {
-                                    isEditing = true
+                                .onChange(of: contentGeometry.size.height) { _, newHeight in
+                                    scrollViewContentHeight = newHeight
                                 }
-                            
-                        } header: {
-                            HStack {
-                                Text("Today - \(formatDate(Date()))")
-                                    .font(.headline)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.gray)
-                                Spacer()
-                                
-                                // Clear button for today's notes
-                                if !noteText.isEmpty {
-                                    Button(action: clearTodaysNotes) {
-                                        Image(systemName: "trash")
-                                            .foregroundColor(.red)
-                                            .font(.caption)
+                            }
+                        )
+                    }
+                    .onAppear {
+                        scrollViewFrameHeight = geometry.size.height
+                        initializeNotesIfNeeded()
+                        // Scroll to today's section after a brief delay
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation(.easeInOut) {
+                                proxy.scrollTo("today", anchor: .top)
+                            }
+                            isTextEditorFocused = true
+                        }
+                    }
+                    .onChange(of: geometry.size.height) { _, newHeight in
+                        scrollViewFrameHeight = newHeight
+                    }
+                    .onChange(of: isTextEditorFocused) { _, newFocusedState in
+                        if newFocusedState {
+                            // When text editor gains focus, only scroll if needed
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                if shouldScrollToBottom(availableHeight: geometry.size.height) {
+                                    withAnimation(.easeOut(duration: 0.3)) {
+                                        proxy.scrollTo("today-bottom", anchor: .bottom)
                                     }
-                                    .buttonStyle(BorderlessButtonStyle())
                                 }
                             }
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 8)
-                            .background(Color(UIColor.systemBackground))
-                            .id("today")
+                        }
+                    }
+                    .onChange(of: keyboardHeight) { _, newKeyboardHeight in
+                        // When keyboard appears/disappears, only scroll if content would be hidden
+                        if newKeyboardHeight > 0 && isTextEditorFocused {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                if shouldScrollToBottom(availableHeight: geometry.size.height) {
+                                    withAnimation(.easeOut(duration: 0.3)) {
+                                        proxy.scrollTo("today-bottom", anchor: .bottom)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
-                .onAppear {
-                    initializeNotesIfNeeded()
-                    // Scroll to today's section after a brief delay
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        withAnimation(.easeInOut) {
-                            proxy.scrollTo("today", anchor: .top)
-                        }
-                        isTextEditorFocused = true
-                    }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+            if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    keyboardHeight = keyboardFrame.height
                 }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeOut(duration: 0.3)) {
+                keyboardHeight = 0
             }
         }
         .onDisappear {
@@ -138,11 +214,6 @@ struct QuickNotesView: View {
                 }
             )
         }
-        .onTapGesture {
-            if !isTextEditorFocused {
-                isTextEditorFocused = true
-            }
-        }
     }
     
     // MARK: - Computed Properties
@@ -151,6 +222,27 @@ struct QuickNotesView: View {
         let words = noteText.components(separatedBy: .whitespacesAndNewlines)
         return words.filter { !$0.isEmpty }.count
     }
+    
+    // MARK: - Smart Scrolling Function
+
+    private func shouldScrollToBottom(availableHeight: CGFloat) -> Bool {
+        // Only consider scrolling if the text editor for today's note is focused
+        // and the keyboard is actually visible.
+        guard isTextEditorFocused && keyboardHeight > 0 else {
+            return false
+        }
+
+        // Calculate the height of the visible area within the ScrollView
+        // after accounting for the keyboard.
+        let visibleAreaHeight = availableHeight - keyboardHeight
+
+        // If the total content height within the ScrollView is greater than
+        // this calculated visible area height, it means some part of the content
+        // (potentially the bottom of the "Today" TextEditor where the user is typing)
+        // might be obscured or pushed off-screen. In such cases, scrolling is needed.
+        return scrollViewContentHeight > visibleAreaHeight
+    }
+    
     
     // MARK: - Initialization
     
@@ -274,20 +366,10 @@ struct NoteSection: Codable, Identifiable {
     var content: String
 }
 
-// MARK: - Attributed Text Display
-
-struct AttributedText: View {
-    let text: String
-    
-    var body: some View {
-        Text(text)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
 
 // MARK: - Preview
 
-struct NotesView_Previews: PreviewProvider {
+struct QuickNotesView_Previews: PreviewProvider {
     static var previews: some View {
         QuickNotesView()
     }

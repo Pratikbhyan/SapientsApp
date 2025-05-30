@@ -13,9 +13,23 @@ class SupabaseManager {
             fatalError("Invalid Supabase URL - Please update SupabaseManager.swift with your project URL")
         }
         
+        // Initialize AuthOptions relying on the SDK's default storage mechanism.
+        // For iOS, this should default to a persistent store (like GoTrueLocalStorage with UserDefaults).
+        let authOptions = SupabaseClientOptions.AuthOptions(
+            autoRefreshToken: true
+        )
+
+        let options = SupabaseClientOptions(
+            db: SupabaseClientOptions.DatabaseOptions(schema: "public"),
+            auth: authOptions
+            // Other options like global, functions, realtime are omitted for simplicity;
+            // they can be added if specifically needed and if their structure is known for this SDK version.
+        )
+
         client = SupabaseClient(
             supabaseURL: supabaseURL,
-            supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5dmduZ3dkbWptYWNlZmxqaGxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDMxOTIsImV4cCI6MjA2MzYxOTE5Mn0.AbhN-Pp4e-wNS9ofL4OtlGnPU9h8UHYYn5nNqCJ_cvM"
+            supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5dmduZ3dkbWptYWNlZmxqaGxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDMxOTIsImV4cCI6MjA2MzYxOTE5Mn0.AbhN-Pp4e-wNS9ofL4OtlGnPU9h8UHYYn5nNqCJ_cvM",
+            options: options
         )
     }
 
