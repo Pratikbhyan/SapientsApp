@@ -245,29 +245,11 @@ struct InitialView: View {
                     // Image part
                     if let imageUrlString = content.imageUrl, // Assuming content.imageUrl is String?
                        let imageURL = repository.getPublicURL(for: imageUrlString, bucket: "images") {
-                        AsyncImage(url: imageURL) { phase in
-                            switch phase {
-                            case .empty:
-                                // Placeholder for loading state - clear background lets gradient show
-                                Color.clear.overlay(ProgressView().scaleEffect(1.5))
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .scaledToFill() // Ensures image fills its frame, maintaining aspect ratio
-                            case .failure(_):
-                                // Placeholder for failure state
-                                VStack {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .resizable().scaledToFit().frame(width: 40, height: 40)
-                                        .foregroundColor(.white.opacity(0.6))
-                                    Text("Image unavailable")
-                                        .font(.caption).foregroundColor(.white.opacity(0.6))
-                                }
-                                .frame(maxWidth: .infinity, maxHeight: .infinity) // Center placeholder content
-                            @unknown default:
-                                EmptyView()
-                            }
+                        CachedAsyncImage(url: imageURL) {
+                            // Placeholder for loading and error states (shows ProgressView for both)
+                            Color.clear.overlay(ProgressView().scaleEffect(1.5))
                         }
+                        .scaledToFill() // Ensures image fills its frame, maintaining aspect ratio
                     } else {
                         // Fallback if imageUrlString is nil or getPublicURL fails
                         VStack {
