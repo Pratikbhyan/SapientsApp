@@ -37,13 +37,15 @@ enum FontSizePreset: CaseIterable, Identifiable {
 struct ContentDetailView: View {
     let content: Content
 
-    init(content: Content) {
+    @ObservedObject var repository: ContentRepository // Changed from @StateObject
+
+    init(content: Content, repository: ContentRepository) { // Added repository to init
         self.content = content
-        print("[DIAG] ContentDetailView init: Title - \(content.title)")
+        self.repository = repository // Assign passed-in repository
+        print("[DIAG] ContentDetailView init: Title - \(content.title), Repository instance: \(Unmanaged.passUnretained(repository).toOpaque())")
     }
     
-    @StateObject private var repository = ContentRepository()
-    @StateObject private var audioPlayer = AudioPlayerService.shared
+    @ObservedObject private var audioPlayer = AudioPlayerService.shared // Changed to @ObservedObject for consistency if it holds significant state, though shared might imply singleton behavior already.
     
     @State private var isPlayingViewActive: Bool = false
     @State private var isLoadingTranscription: Bool = false
@@ -72,13 +74,12 @@ struct ContentDetailView: View {
                         onPlayTapped: {
                             Task {
                                 // Ensure transcriptions are loaded before switching to playing view
-                                if repository.transcriptions.isEmpty {
-                                   isLoadingTranscription = true
-                                   // Make sure ContentRepository is being correctly injected or initialized
-                                   // if this await call relies on an instance that might not be ready.
-                                   await repository.fetchTranscriptions(for: content.id)
-                                   isLoadingTranscription = false
-                                }
+                                // The check for empty transcriptions is now handled by ContentRepository's internal logic
+                                isLoadingTranscription = true
+                                // Make sure ContentRepository is being correctly injected or initialized
+                                // if this await call relies on an instance that might not be ready.
+                                await repository.fetchTranscriptions(for: content.id, from: content.transcriptionUrl)
+                                isLoadingTranscription = false
                                 // Allow playing if audio is loaded, even if transcriptions fail or are empty
                                 if audioPlayer.duration > 0 {
                                    audioPlayer.play()
@@ -119,11 +120,10 @@ struct ContentDetailView: View {
             }
             // Pre-fetch transcriptions
             Task {
-                if repository.transcriptions.isEmpty {
-                    isLoadingTranscription = true
-                    await repository.fetchTranscriptions(for: content.id)
-                    isLoadingTranscription = false
-                }
+                // The check for empty transcriptions is now handled by ContentRepository's internal logic
+                isLoadingTranscription = true
+                await repository.fetchTranscriptions(for: content.id, from: content.transcriptionUrl)
+                isLoadingTranscription = false
             }
         }
         .onDisappear {
@@ -136,6 +136,8 @@ struct ContentDetailView: View {
         }
         // Ignore safe area for PlayingView to allow full-screen background,
         // but respect it for InitialView.
+        .navigationBarBackButtonHidden(isPlayingViewActive) // Hide system back button when playing view is active
+        .toolbar(isPlayingViewActive ? .hidden : .automatic, for: .tabBar) // Hide/show tab bar based on PlayingView state
         .edgesIgnoringSafeArea(isPlayingViewActive ? .all : [])
         .preferredColorScheme(isPlayingViewActive ? .dark : nil)
         .onAppear {
@@ -350,14 +352,22 @@ struct PlayingView: View {
     var body: some View {
         VStack(spacing: 0) { 
                 HStack {
-                Spacer() // Pushes font size button to the right
-                // Font size adjustment button
-                Button(action: { currentFontSizePreset = currentFontSizePreset.next() }) {
-                    Image(systemName: "textformat.size")
-                        .font(.title2)
-                        .foregroundColor(.white.opacity(0.8))
+                    // Back button
+                    Button(action: onDismissTapped) { // Use the passed-in closure
+                        Image(systemName: "chevron.backward")
+                            .font(.title2)
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+
+                    Spacer() // Pushes font size button to the right
+                    
+                    // Font size adjustment button
+                    Button(action: { currentFontSizePreset = currentFontSizePreset.next() }) {
+                        Image(systemName: "textformat.size")
+                            .font(.title2)
+                            .foregroundColor(.white.opacity(0.8))
+                    }
                 }
-            }
             .padding(.horizontal, 20)
             .padding(.top, (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first(where: { $0.isKeyWindow })?.safeAreaInsets.top ?? 15)
             .padding(.bottom, 8) // Apply horizontal padding to the HStack for both buttons
@@ -436,8 +446,7 @@ struct PlayingView: View {
                 }
             }
             .padding(.horizontal, 20) // This padding creates the margins for the transcription block
-            .frame(height: UIScreen.main.bounds.height * 0.6) // Limit scroll area to avoid overflow
-            .layoutPriority(1)
+            .layoutPriority(1) // Removed fixed height to allow flexible sizing
 
             // Title has been removed as per request
 
@@ -585,7 +594,8 @@ struct ContentDetailView_Previews_FinalLayout: PreviewProvider {
             audioUrl: "sample.mp3", // These won't load in preview unless handled
             imageUrl: "sample.jpg", // These won't load in preview unless handled
             createdAt: Date(),
-            publishOn: nil
+            publishOn: nil,
+            transcriptionUrl: nil // Added for preview
         )
         
         // Mock Repository for preview (instance not directly used here as ContentDetailView creates its own)
@@ -600,8 +610,11 @@ struct ContentDetailView_Previews_FinalLayout: PreviewProvider {
         // For this setup, ContentDetailView initializes its own @StateObject for repository.
         // To make previews work with mock data for repository, you might need to adjust ContentDetailView
         // to accept repository as a parameter or use .environmentObject for previews.
-        
-        ContentDetailView(content: mockContent)
+        let mockRepo = ContentRepository() // Create a mock repository for the preview
+        // Optionally populate mockRepo with data if needed for the preview
+        // mockRepo.transcriptions = [ ... ] 
+
+        ContentDetailView(content: mockContent, repository: mockRepo) // Pass the mock repository
             // Example of how you might inject for preview if sub-views need it:
             // .environmentObject(AudioPlayerService.shared)
             // .environmentObject(mockRepo) // if repository was an EnvironmentObject

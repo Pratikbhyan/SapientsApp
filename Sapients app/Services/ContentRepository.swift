@@ -10,6 +10,7 @@ class ContentRepository: ObservableObject {
     @Published var transcriptions: [Transcription] = []
     @Published var isLoading = false
     @Published var error: Error?
+    @Published var currentContentIdForTranscriptions: UUID? // Tracks content ID for current transcriptions
     
     // MARK: - Content Operations
     func fetchAllContent() async {
@@ -21,7 +22,7 @@ class ContentRepository: ObservableObject {
 
             let response: [Content] = try await supabase
                 .from("content")
-                .select("id, title, description, audio_url, image_url, created_at, publish_on") // Explicitly select all needed columns including publish_on
+                .select("id, title, description, audio_url, image_url, created_at, publish_on, transcription_url") // Explicitly select all needed columns including publish_on
                 .or("publish_on.lte.\(now),publish_on.is.null") // publish_on <= now OR publish_on IS NULL
                 .order("created_at", ascending: false) // Keep existing order or adjust as needed
                 .execute()
@@ -36,24 +37,86 @@ class ContentRepository: ObservableObject {
     }
     
     // MARK: - Transcription Operations
-    func fetchTranscriptions(for contentId: UUID) async {
+    func fetchTranscriptions(for contentId: UUID, from transcriptionPath: String?) async {
+        // Clear old transcriptions if they are for a different content item or if current ID is nil
+        if self.currentContentIdForTranscriptions != contentId {
+            self.transcriptions = []
+            // print("[DIAG_REPO] Clearing transcriptions, new content ID: \(contentId), old: \(String(describing: self.currentContentIdForTranscriptions))")
+        }
+        // Update the content ID we are fetching for *before* the async network call
+        // Or, update it only on successful fetch to avoid inconsistent state if fetch fails mid-way.
+        // For simplicity now, we'll set it and rely on clearing if path is nil or fetch fails.
+        self.currentContentIdForTranscriptions = contentId
         // self.isLoading = true // Removed: ContentDetailView uses its own isLoadingTranscription state
         self.error = nil
         
+        guard let path = transcriptionPath, !path.isEmpty else {
+            print("No transcription path provided for contentId: \(contentId).")
+            self.transcriptions = [] // Clear existing transcriptions
+            self.error = nil // Clear previous errors
+            return
+        }
+
+        // Assuming CSVs are in a bucket named "transcriptions_csv" or similar.
+        // Please adjust "transcriptions_csv" if your bucket name is different.
+        guard let csvUrl = getPublicURL(for: path, bucket: "transcription") else { // Corrected bucket name
+            print("Could not get public URL for transcription CSV: \(path)")
+            self.transcriptions = [] // Ensure it's empty if no path
+            self.error = NSError(domain: "ContentRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid CSV URL or no path provided for content ID: \(contentId)"])
+            // self.currentContentIdForTranscriptions = contentId // Already set, or set to nil if we consider this a 'failed to load' state for this ID
+            return
+        }
+
         do {
-            let response: [Transcription] = try await supabase
-                .from("transcriptions")
-                .select()
-                .eq("content_id", value: contentId)
-                .order("start_time")
-                .execute()
-                .value
+            let (data, _) = try await URLSession.shared.data(from: csvUrl)
+            guard let csvString = String(data: data, encoding: .utf8) else {
+                print("Could not decode CSV data to string.")
+                self.transcriptions = []
+                self.error = NSError(domain: "ContentRepository", code: 1, userInfo: [NSLocalizedDescriptionKey: "CSV decoding error"])
+                return
+            }
+
+            var parsedTranscriptions: [Transcription] = []
+            let lines = csvString.split(whereSeparator: \.isNewline)
             
-            self.transcriptions = response
-            // self.isLoading = false // Removed
+            // Skip header row if present - adjust if your CSV doesn't have a header
+            // Or, more robustly, check if the first line looks like a header
+            var dataLines = lines
+            if let firstLine = lines.first, firstLine.contains("Start (s)") && firstLine.contains("End (s)") && firstLine.contains("Segment") {
+                dataLines.removeFirst()
+            }
+
+            for line in dataLines {
+                let columns = line.split(separator: ",", maxSplits: 2, omittingEmptySubsequences: false).map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                
+                guard columns.count == 3, 
+                      let startTime = Float(columns[0]),
+                      let endTime = Float(columns[1]) else {
+                    print("Skipping malformed CSV line: \(line)")
+                    continue
+                }
+                
+                let text = columns[2].trimmingCharacters(in: CharacterSet(charactersIn: "\"")) // Remove surrounding quotes if any
+
+                let transcription = Transcription(
+                    id: UUID(), 
+                    contentId: contentId, 
+                    text: text, 
+                    startTime: startTime, 
+                    endTime: endTime, 
+                    createdAt: Date()
+                )
+                parsedTranscriptions.append(transcription)
+            }
+            
+            self.transcriptions = parsedTranscriptions
+            self.error = nil
+            self.currentContentIdForTranscriptions = contentId // Confirm content ID on successful load
+            // print("[DIAG_REPO] Successfully parsed \(parsedTranscriptions.count) transcriptions for \(contentId) from \(path)")
         } catch {
+            print("Error fetching or parsing CSV: \(error.localizedDescription)")
+            self.transcriptions = []
             self.error = error
-            // self.isLoading = false // Removed, error state is sufficient here
         }
     }
     
@@ -70,7 +133,7 @@ class ContentRepository: ObservableObject {
         do {
             let response: [Content] = try await supabase
                 .from("content")
-                .select()
+                .select("id, title, description, audio_url, image_url, created_at, publish_on, transcription_url") // Explicitly select all, including new field
                 .order("created_at", ascending: false)
                 .limit(1)
                 .execute()

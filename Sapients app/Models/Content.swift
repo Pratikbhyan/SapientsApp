@@ -8,6 +8,7 @@ struct Content: Identifiable, Codable, Equatable {
     let imageUrl: String?
     let createdAt: Date
     let publishOn: Date? // New field, make it optional
+    let transcriptionUrl: String?
     
     var effectiveSortDate: Date {
         return publishOn ?? createdAt
@@ -21,5 +22,6 @@ struct Content: Identifiable, Codable, Equatable {
         case imageUrl = "image_url"
         case createdAt = "created_at"
         case publishOn = "publish_on"
+        case transcriptionUrl = "transcription_url"
     }
 } 

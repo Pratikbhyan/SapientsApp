@@ -18,7 +18,7 @@ struct DailyContentViewLoader: View {
                     ProgressView("Loading Today's Pick...")
                 }
             } else if let content = dailyContent {
-                ContentDetailView(content: content)
+                ContentDetailView(content: content, repository: repository) // Pass the repository
             } else if let errorMessage = errorMessage {
                 VStack(spacing: 20) {
                     Image(systemName: "exclamationmark.triangle.fill")

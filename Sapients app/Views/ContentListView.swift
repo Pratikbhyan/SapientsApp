@@ -37,28 +37,27 @@ struct ContentListView: View {
         
         ZStack(alignment: .bottomTrailing) {
             VStack(spacing: 0) {
-                // Settings Button
+                // Top Bar: Segmented Control and Settings Button
                 HStack {
-                    Spacer()
+                    Spacer() // Pushes segmented control to center
+                    StylishSegmentedControl(
+                        selection: $selectedSegmentIndex,
+                        items: [
+                            (icon: nil, title: "Library"),
+                            (icon: nil, title: "Favourites")
+                        ]
+                    )
+                    .frame(maxWidth: UIScreen.main.bounds.width * 0.9) // Constrain width to allow centering
+                    Spacer() // Pushes settings button to the right
                     NavigationLink(destination: SettingsView()) {
                         Image(systemName: "gearshape.fill")
                             .font(.system(size: 22))
                             .foregroundColor(.accentColor)
                     }
                 }
-                .padding(.horizontal)
-                .padding(.top, 8)
-                .padding(.bottom, 4)
-
-                StylishSegmentedControl(
-                    selection: $selectedSegmentIndex,
-                    items: [
-                        (icon: nil, title: "Library"),
-                        (icon: nil, title: "Favourites")
-                    ]
-                )
-                .padding(.horizontal)
-                .padding(.bottom, 10)
+                .padding(.horizontal) // Horizontal padding for the whole bar
+                .padding(.top, 8)     // Top padding for the bar
+                .padding(.bottom, 10) // Bottom padding after the bar
                 .onChange(of: selectedSegmentIndex) { _, newIndex in
                     selectedTab = (newIndex == 0) ? .library : .favourites
                 }
@@ -84,7 +83,7 @@ struct ContentListView: View {
                         } else {
                             ScrollViewReader { scrollViewProxy in
                                 List(filteredContents) { content in
-                                    NavigationLink(destination: ContentDetailView(content: content)) {
+                                    NavigationLink(destination: ContentDetailView(content: content, repository: repository)) {
                                         ContentRowView(content: content, repository: repository)
                                     }
                                 }
@@ -123,7 +122,7 @@ struct ContentListView: View {
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         } else {
                             List(filteredContents) { content in
-                                NavigationLink(destination: ContentDetailView(content: content)) {
+                                NavigationLink(destination: ContentDetailView(content: content, repository: repository)) { // Pass the repository
                                     ContentRowView(content: content, repository: repository)
                                 }
                             }
