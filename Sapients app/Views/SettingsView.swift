@@ -80,13 +80,6 @@ struct SettingsView: View {
         if let pictureURLString = metadata["picture"]?.stringValue {
             return URL(string: pictureURLString)
         }
-        // Fallback for direct string casting if .stringValue isn't appropriate for the stored JSON structure
-        if let avatarURLString = metadata["avatar_url"] as? String {
-            return URL(string: avatarURLString)
-        }
-        if let pictureURLString = metadata["picture"] as? String {
-            return URL(string: pictureURLString)
-        }
         return nil
     }
     

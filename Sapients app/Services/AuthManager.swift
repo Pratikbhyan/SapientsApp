@@ -50,7 +50,7 @@ class AuthManager: ObservableObject {
                         // .initialSession is typically handled by checkInitialAuthState upon app launch.
                         // However, if it's emitted by authStateChanges, we can log it or update state if necessary.
                         print("[AuthManager] Auth event: .initialSession. Current session: \(String(describing: state.session))")
-                        if let session = state.session, !session.accessToken.isEmpty, session.user != nil {
+                        if let session = state.session, !session.accessToken.isEmpty {
                             self.isAuthenticated = true
                             self.user = session.user
                         } else {
@@ -63,7 +63,7 @@ class AuthManager: ObservableObject {
                         // Catch any other events not explicitly handled.
                         print("[AuthManager] Auth event: \(state.event) (default case). Current session: \(String(describing: state.session))")
                         // You might want to re-evaluate authentication status based on the session present in unhandled events.
-                        if let session = state.session, !session.accessToken.isEmpty, session.user != nil {
+                        if let session = state.session, !session.accessToken.isEmpty {
                             // self.isAuthenticated = true // Uncomment if appropriate for unhandled events
                             // self.user = session.user
                         } else if state.event == .signedOut { // Ensure signedOut is definitely handled if it falls here
@@ -82,7 +82,7 @@ class AuthManager: ObservableObject {
             do {
                 let session = try await supabase.auth.session
                 // Check if the session and token are valid
-                if !session.accessToken.isEmpty && session.user != nil {
+                if !session.accessToken.isEmpty {
                     await MainActor.run {
                         self.isAuthenticated = true
                         self.user = session.user
