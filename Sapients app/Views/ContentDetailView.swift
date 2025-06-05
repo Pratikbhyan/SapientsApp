@@ -38,10 +38,12 @@ struct ContentDetailView: View {
     let content: Content
 
     @ObservedObject var repository: ContentRepository // Changed from @StateObject
+    @Binding var showMiniPlayer: Bool // Add this binding
 
-    init(content: Content, repository: ContentRepository) { // Added repository to init
+    init(content: Content, repository: ContentRepository, showMiniPlayer: Binding<Bool>) {
         self.content = content
         self.repository = repository // Assign passed-in repository
+        self._showMiniPlayer = showMiniPlayer // Initialize the binding
         print("[DIAG] ContentDetailView init: Title - \(content.title), Repository instance: \(Unmanaged.passUnretained(repository).toOpaque())")
     }
     
@@ -85,6 +87,7 @@ struct ContentDetailView: View {
                                    audioPlayer.play()
                                    withAnimation(.easeInOut(duration: 0.3)) {
                                        isPlayingViewActive = true
+                                       showMiniPlayer = false // Hide miniplayer when full view is active
                                    }
                                 } else {
                                     // Handle case where audio might not be ready (duration is 0)
@@ -127,17 +130,13 @@ struct ContentDetailView: View {
             }
         }
         .onDisappear {
-            audioPlayer.pause() // Pause audio if the view disappears completely
+            // audioPlayer.pause() // Removed to allow miniplayer to function
         }
         .onChange(of: audioPlayer.currentTime) { // Corrected onChange for iOS 17+
             if isPlayingViewActive {
                 audioPlayer.updateCurrentTranscription(transcriptions: repository.transcriptions)
             }
         }
-        // Ignore safe area for PlayingView to allow full-screen background,
-        // but respect it for InitialView.
-        .navigationBarBackButtonHidden(isPlayingViewActive) // Hide system back button when playing view is active
-        .toolbar(isPlayingViewActive ? .hidden : .automatic, for: .tabBar) // Hide/show tab bar based on PlayingView state
         .edgesIgnoringSafeArea(isPlayingViewActive ? .all : [])
         .preferredColorScheme(isPlayingViewActive ? .dark : nil)
         .onAppear {
@@ -614,7 +613,7 @@ struct ContentDetailView_Previews_FinalLayout: PreviewProvider {
         // Optionally populate mockRepo with data if needed for the preview
         // mockRepo.transcriptions = [ ... ] 
 
-        ContentDetailView(content: mockContent, repository: mockRepo) // Pass the mock repository
+        ContentDetailView(content: mockContent, repository: mockRepo, showMiniPlayer: .constant(false))
             // Example of how you might inject for preview if sub-views need it:
             // .environmentObject(AudioPlayerService.shared)
             // .environmentObject(mockRepo) // if repository was an EnvironmentObject

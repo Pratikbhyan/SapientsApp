@@ -11,6 +11,9 @@ struct ContentListView: View {
     @State private var showingQuickNotesSheet = false // For .sheet presentation
     @StateObject private var repository = ContentRepository()
     @StateObject private var favoritesService = FavoritesService.shared
+    @State private var presentingContentDetail: Content? = nil
+    @State private var showMiniPlayer: Bool = false // New state for miniplayer visibility
+    @StateObject private var audioPlayer = AudioPlayerService.shared // Ensure access to the player
 
     init() {
         print("[DIAG] ContentListView INIT")
@@ -32,107 +35,118 @@ struct ContentListView: View {
         }
     }
     
+    @ViewBuilder
+    private var listContent: some View {
+        VStack(spacing: 0) {
+            // Top Bar: Segmented Control and Settings Button
+            HStack {
+                Spacer() // Pushes segmented control to center
+                StylishSegmentedControl(
+                    selection: $selectedSegmentIndex,
+                    items: [
+                        (icon: nil, title: "Library"),
+                        (icon: nil, title: "Favourites")
+                    ]
+                )
+                .frame(maxWidth: UIScreen.main.bounds.width * 0.9) // Constrain width to allow centering
+                Spacer() // Pushes settings button to the right
+                NavigationLink(destination: SettingsView()) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.accentColor)
+                }
+            }
+            .padding(.horizontal) // Horizontal padding for the whole bar
+            .padding(.top, 8)     // Top padding for the bar
+            .padding(.bottom, 10) // Bottom padding after the bar
+            .onChange(of: selectedSegmentIndex) { _, newIndex in
+                selectedTab = (newIndex == 0) ? .library : .favourites
+            }
+
+            Group {
+                if selectedTab == .library {
+                    if repository.isLoading && repository.contents.isEmpty {
+                        ProgressView("Loading content...")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if repository.contents.isEmpty {
+                        VStack {
+                            Image(systemName: "music.note.list")
+                                .font(.largeTitle)
+                                .foregroundColor(.secondary)
+                            Text("No content available")
+                                .font(.headline)
+                                .foregroundColor(.secondary)
+                            Text("Check back later for new content")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        ScrollViewReader { scrollViewProxy in
+                            List(filteredContents) { content in
+                                Button(action: {
+                                    self.presentingContentDetail = content
+                                }) {
+                                    ContentRowView(content: content, repository: repository)
+                                }
+                                .buttonStyle(PlainButtonStyle()) // To make the whole row tappable like a NavLink
+                                .id(content.id) // Keep for ScrollViewReader
+                            }
+                            .refreshable {
+                                await repository.fetchAllContent()
+                            }
+                            .onAppear {
+                                if let lastItem = filteredContents.last {
+                                    scrollViewProxy.scrollTo(lastItem.id, anchor: .bottom)
+                                }
+                            }
+                            .onChange(of: filteredContents) { _, newContents in
+                                if let lastItem = newContents.last {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        scrollViewProxy.scrollTo(lastItem.id, anchor: .bottom)
+                                    }
+                                }
+                            }
+                        } // End ScrollViewReader
+                    }
+                } else if selectedTab == .favourites {
+                    if filteredContents.isEmpty {
+                        VStack {
+                            Image(systemName: "heart.slash.fill")
+                                .font(.largeTitle)
+                                .foregroundColor(.secondary)
+                            Text("No Favourites Yet")
+                                .font(.headline)
+                                .foregroundColor(.secondary)
+                            Text("Tap the heart on an item to add it to your favourites.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        List(filteredContents) { content in
+                            Button(action: {
+                                self.presentingContentDetail = content
+                            }) {
+                                ContentRowView(content: content, repository: repository)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+            } // End Group
+            .listStyle(.plain) // Apply listStyle to the Group
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     var body: some View {
         let _ = print("[DIAG] ContentListView BODY")
         
         ZStack(alignment: .bottomTrailing) {
-            VStack(spacing: 0) {
-                // Top Bar: Segmented Control and Settings Button
-                HStack {
-                    Spacer() // Pushes segmented control to center
-                    StylishSegmentedControl(
-                        selection: $selectedSegmentIndex,
-                        items: [
-                            (icon: nil, title: "Library"),
-                            (icon: nil, title: "Favourites")
-                        ]
-                    )
-                    .frame(maxWidth: UIScreen.main.bounds.width * 0.9) // Constrain width to allow centering
-                    Spacer() // Pushes settings button to the right
-                    NavigationLink(destination: SettingsView()) {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(.accentColor)
-                    }
-                }
-                .padding(.horizontal) // Horizontal padding for the whole bar
-                .padding(.top, 8)     // Top padding for the bar
-                .padding(.bottom, 10) // Bottom padding after the bar
-                .onChange(of: selectedSegmentIndex) { _, newIndex in
-                    selectedTab = (newIndex == 0) ? .library : .favourites
-                }
-
-                Group {
-                    if selectedTab == .library {
-                        if repository.isLoading && repository.contents.isEmpty {
-                            ProgressView("Loading content...")
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        } else if repository.contents.isEmpty {
-                            VStack {
-                                Image(systemName: "music.note.list")
-                                    .font(.largeTitle)
-                                    .foregroundColor(.secondary)
-                                Text("No content available")
-                                    .font(.headline)
-                                    .foregroundColor(.secondary)
-                                Text("Check back later for new content")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        } else {
-                            ScrollViewReader { scrollViewProxy in
-                                List(filteredContents) { content in
-                                    NavigationLink(destination: ContentDetailView(content: content, repository: repository)) {
-                                        ContentRowView(content: content, repository: repository)
-                                    }
-                                }
-                                .refreshable {
-                                    await repository.fetchAllContent()
-                                }
-                                .onAppear {
-                                    if let lastItem = filteredContents.last {
-                                        scrollViewProxy.scrollTo(lastItem.id, anchor: .bottom)
-                                    }
-                                }
-                                .onChange(of: filteredContents) { _, newContents in
-                                    if let lastItem = newContents.last {
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                            scrollViewProxy.scrollTo(lastItem.id, anchor: .bottom)
-                                        }
-                                    }
-                                }
-                            } // End ScrollViewReader
-                        }
-                    } else if selectedTab == .favourites {
-                        if filteredContents.isEmpty {
-                            VStack {
-                                Image(systemName: "heart.slash.fill")
-                                    .font(.largeTitle)
-                                    .foregroundColor(.secondary)
-                                Text("No Favourites Yet")
-                                    .font(.headline)
-                                    .foregroundColor(.secondary)
-                                Text("Tap the heart on an item to add it to your favourites.")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal)
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        } else {
-                            List(filteredContents) { content in
-                                NavigationLink(destination: ContentDetailView(content: content, repository: repository)) { // Pass the repository
-                                    ContentRowView(content: content, repository: repository)
-                                }
-                            }
-                        }
-                    }
-                } // End Group
-                .listStyle(.plain) // Apply listStyle to the Group
-                 
-            } // End VStack
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            listContent
 
             Button(action: {
                 showingQuickNotesSheet = true
@@ -155,6 +169,44 @@ struct ContentListView: View {
         .sheet(isPresented: $showingQuickNotesSheet) {
             QuickNotesView()
         }
+        // Add this sheet modifier to the ZStack or main VStack
+        .sheet(item: $presentingContentDetail) { contentToPresent in
+            // Pass the repository instance to ContentDetailView
+            ContentDetailView(
+                content: contentToPresent,
+                repository: repository, // Pass the existing repository
+                showMiniPlayer: $showMiniPlayer // Pass binding for miniplayer
+            )
+            .onDisappear {
+                // This is where you'll trigger the miniplayer if audio is playing
+                if audioPlayer.isPlaying {
+                    showMiniPlayer = true
+                }
+            }
+        }
+        // Add the MiniPlayer overlay here
+        .overlay(
+            Group {
+                if showMiniPlayer && audioPlayer.isPlaying {
+                    if let currentContent = presentingContentDetail {
+                        MiniPlayerView(
+                            content: currentContent, // You'll need to pass the currently playing content
+                            audioPlayer: audioPlayer,
+                            repository: repository,
+                            onTap: {
+                                // When miniplayer is tapped, re-present the sheet
+                                // Or, if you have a different content item playing, update presentingContentDetail
+                                self.presentingContentDetail = currentContent // Or the actual playing content
+                                self.showMiniPlayer = false // Hide miniplayer as full view appears
+                            }
+                        )
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .animation(.spring(), value: showMiniPlayer)
+                    }
+                }
+            },
+            alignment: .bottom
+        )
         .task {
             if repository.contents.isEmpty {
                  await repository.fetchAllContent()

@@ -7,7 +7,7 @@ struct DailyContentViewLoader: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        Group {
+        VStack {
             if isLoadingState {
                 VStack {
                     Image("loadingScreen")
@@ -15,10 +15,10 @@ struct DailyContentViewLoader: View {
                         .scaledToFit()
                         .frame(width: 200, height: 200)
                         .padding(.bottom)
-                    ProgressView("Loading Today's Pick...")
+                    ProgressView { Text("Loading Today's Pick...") }
                 }
             } else if let content = dailyContent {
-                ContentDetailView(content: content, repository: repository) // Pass the repository
+                ContentDetailView(content: content, repository: repository, showMiniPlayer: .constant(false))
             } else if let errorMessage = errorMessage {
                 VStack(spacing: 20) {
                     Image(systemName: "exclamationmark.triangle.fill")
