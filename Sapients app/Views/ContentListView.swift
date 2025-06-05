@@ -1,19 +1,11 @@
 import SwiftUI
 
 struct ContentListView: View {
-    // State variables for Quick Notes button customization
-    @State private var quickNotesButtonWidth: CGFloat = 160
-    @State private var quickNotesButtonHeight: CGFloat = 50
-    @State private var quickNotesButtonCornerRadius: CGFloat = 25
-    @State private var quickNotesButtonOffsetX: CGFloat = -20 // From trailing edge
-    @State private var quickNotesButtonOffsetY: CGFloat = -30 // From bottom edge
-    
-    @State private var showingQuickNotesSheet = false // For .sheet presentation
     @StateObject private var repository = ContentRepository()
     @StateObject private var favoritesService = FavoritesService.shared
     @State private var presentingContentDetail: Content? = nil
-    @State private var showMiniPlayer: Bool = false // New state for miniplayer visibility
     @StateObject private var audioPlayer = AudioPlayerService.shared // Ensure access to the player
+    @EnvironmentObject var miniPlayerState: MiniPlayerState // Access to mini-player state
 
     init() {
         print("[DIAG] ContentListView INIT")
@@ -145,79 +137,27 @@ struct ContentListView: View {
     var body: some View {
         let _ = print("[DIAG] ContentListView BODY")
         
-        ZStack(alignment: .bottomTrailing) {
-            listContent
-
-            Button(action: {
-                showingQuickNotesSheet = true
-            }) {
-                HStack {
-                    Image(systemName: "pencil")
-                    Text("Quick Notes")
-                }
-                .font(.headline)
-                .padding()
-                .frame(width: quickNotesButtonWidth, height: quickNotesButtonHeight)
-                .background(Color(red: 135/255.0, green: 206/255.0, blue: 245/255.0, opacity: 0.9))
-                .foregroundColor(.white)
-                .cornerRadius(quickNotesButtonCornerRadius)
-                .shadow(radius: 5)
-            }
-            .offset(x: quickNotesButtonOffsetX, y: quickNotesButtonOffsetY)
-            
-        } // End ZStack
-        .sheet(isPresented: $showingQuickNotesSheet) {
-            QuickNotesView()
-        }
-        // Add this sheet modifier to the ZStack or main VStack
-        .sheet(item: $presentingContentDetail) { contentToPresent in
-            // Pass the repository instance to ContentDetailView
-            ContentDetailView(
-                content: contentToPresent,
-                repository: repository, // Pass the existing repository
-                showMiniPlayer: $showMiniPlayer // Pass binding for miniplayer
-            )
-            .onDisappear {
-                // This is where you'll trigger the miniplayer if audio is playing
-                if audioPlayer.isPlaying {
-                    showMiniPlayer = true
-                }
-            }
-        }
-        // Add the MiniPlayer overlay here
-        .overlay(
-            Group {
-                if showMiniPlayer && audioPlayer.isPlaying {
-                    if let currentContent = presentingContentDetail {
-                        MiniPlayerView(
-                            content: currentContent, // You'll need to pass the currently playing content
-                            audioPlayer: audioPlayer,
-                            repository: repository,
-                            onTap: {
-                                // When miniplayer is tapped, re-present the sheet
-                                // Or, if you have a different content item playing, update presentingContentDetail
-                                self.presentingContentDetail = currentContent // Or the actual playing content
-                                self.showMiniPlayer = false // Hide miniplayer as full view appears
-                            }
-                        )
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .animation(.spring(), value: showMiniPlayer)
+        listContent
+            .sheet(item: $presentingContentDetail) { contentToPresent in
+                ContentDetailView(content: contentToPresent, repository: repository)
+                    .environmentObject(audioPlayer)
+                    .environmentObject(MiniPlayerState(player: audioPlayer))
+                    .onDisappear {
+                        print("[DIAG] ContentDetailView via sheet DISMISSED")
+                        // Mini-player visibility is now handled globally by MiniPlayerState and Sapients_appApp
                     }
-                }
-            },
-            alignment: .bottom
-        )
-        .task {
-            if repository.contents.isEmpty {
-                 await repository.fetchAllContent()
             }
-        }
-        .onAppear {
-            print("[DIAG] ContentListView ON_APPEAR (ZStack level)")
-        }
-        .onDisappear {
-            print("[DIAG] ContentListView ON_DISAPPEAR (ZStack level)")
-        }
+            .task {
+                if repository.contents.isEmpty {
+                     await repository.fetchAllContent()
+                }
+            }
+            .onAppear {
+                print("[DIAG] ContentListView ON_APPEAR (listContent level)")
+            }
+            .onDisappear {
+                print("[DIAG] ContentListView ON_DISAPPEAR (listContent level)")
+            }
     }
 }
 

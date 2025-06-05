@@ -19,6 +19,20 @@ struct QuickNotesView: View {
     
     var body: some View {
         VStack(spacing: 0) {
+            // Dismiss keyboard button
+            HStack {
+                Button(action: {
+                    isTextEditorFocused = false // Dismiss the keyboard
+                }) {
+                    Image(systemName: "chevron.down") // Changed icon
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(skyBlue)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
             // Centered header with colored title
             VStack(spacing: 8) {
                 Text("Quick Notes")
@@ -356,14 +370,6 @@ struct QuickNotesView: View {
             print("Error loading note sections: \(error.localizedDescription)")
         }
     }
-}
-
-// MARK: - Supporting Types
-
-struct NoteSection: Codable, Identifiable {
-    var id = UUID()
-    var date: Date
-    var content: String
 }
 
 

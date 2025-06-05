@@ -18,7 +18,7 @@ struct DailyContentViewLoader: View {
                     ProgressView { Text("Loading Today's Pick...") }
                 }
             } else if let content = dailyContent {
-                ContentDetailView(content: content, repository: repository, showMiniPlayer: .constant(false))
+                ContentDetailView(content: content, repository: repository)
             } else if let errorMessage = errorMessage {
                 VStack(spacing: 20) {
                     Image(systemName: "exclamationmark.triangle.fill")

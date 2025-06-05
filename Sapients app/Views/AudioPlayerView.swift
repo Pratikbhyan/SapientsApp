@@ -2,12 +2,48 @@ import SwiftUI
 import AVFoundation
 import Foundation // For URL, UUID
 
+/// ViewModel that wraps AVPlayer and publishes playback state.
+final class PlayerViewModel: ObservableObject {
+    @Published private(set) var isPlaying: Bool = false
+    private var player: AVPlayer?
+    private var rateObservation: NSKeyValueObservation?
+
+    deinit {
+        removeRateObserver()
+    }
+
+    func loadItem(from url: URL) {
+        removeRateObserver()
+        let item = AVPlayerItem(url: url)
+        let newPlayer = AVPlayer(playerItem: item)
+        player = newPlayer
+        rateObservation = newPlayer.observe(\.rate, options: [.new, .initial]) { [weak self] player, _ in
+            DispatchQueue.main.async {
+                self?.isPlaying = (player.rate > 0 && player.error == nil)
+            }
+        }
+    }
+
+    func play() {
+        player?.play()
+    }
+
+    func pause() {
+        player?.pause()
+    }
+
+    private func removeRateObserver() {
+        rateObservation?.invalidate()
+        rateObservation = nil
+    }
+}
+
 // Ensure AudioItem struct is defined (e.g., in AudioItem.swift and added to target)
 // Ensure AudioCacheManager class is defined (in AudioCacheManager.swift and added to target)
 
 struct AudioPlayerView: View {
     @StateObject private var audioCacheManager = AudioCacheManager.shared
-    @State private var audioPlayer: AVAudioPlayer? // To play the audio
+    @StateObject private var playerVM = PlayerViewModel()
     @State private var currentlyPlayingURL: URL? // To track which item is playing
     @State private var playRequestError: String?
     @State private var isLoadingTracks: Bool = false
@@ -41,7 +77,7 @@ struct AudioPlayerView: View {
                                 Text("Downloading...")
                                     .font(.caption)
                                     .foregroundColor(.gray)
-                            } else if audioPlayer?.url == currentlyPlayingURL && currentlyPlayingURL == item.remoteURL && audioPlayer?.isPlaying == true {
+                            } else if playerVM.isPlaying && currentlyPlayingURL == item.remoteURL {
                                 Text("Playing...")
                                     .font(.caption)
                                     .foregroundColor(.green)
@@ -55,7 +91,7 @@ struct AudioPlayerView: View {
                         Button(action: {
                             playOrDownloadAudio(for: item)
                         }) {
-                            Image(systemName: audioPlayer?.url == currentlyPlayingURL && currentlyPlayingURL == item.remoteURL && audioPlayer?.isPlaying == true ? "stop.circle.fill" : "play.circle.fill")
+                            Image(systemName: playerVM.isPlaying && currentlyPlayingURL == item.remoteURL ? "stop.circle.fill" : "play.circle.fill")
                                 .font(.title)
                         }
                         .disabled(audioCacheManager.isDownloading[item.remoteURL] == true)
@@ -72,7 +108,7 @@ struct AudioPlayerView: View {
                 Section(header: Text("Cache Management")) {
                     Button("Clear Audio Cache") {
                         audioCacheManager.clearCache()
-                        self.audioPlayer?.stop()
+                        playerVM.pause()
                         self.currentlyPlayingURL = nil
                         self.playRequestError = "Cache Cleared"
                     }
@@ -90,44 +126,41 @@ struct AudioPlayerView: View {
                 fetchAudioTracks()
             }
             .onDisappear {
-                audioPlayer?.stop()
+                playerVM.pause()
             }
         }
     }
 
     private func playOrDownloadAudio(for item: AudioItem) {
         self.playRequestError = nil
-        
-        if audioPlayer?.isPlaying == true && currentlyPlayingURL == item.remoteURL {
-            audioPlayer?.stop()
+
+        // If the same URL is playing, pause it.
+        if playerVM.isPlaying && currentlyPlayingURL == item.remoteURL {
+            playerVM.pause()
             currentlyPlayingURL = nil
             return
         }
-        
-        audioPlayer?.stop()
+
+        // Otherwise, stop any existing playback and load the new URL
+        playerVM.pause()
+        currentlyPlayingURL = nil
 
         audioCacheManager.getAudioURL(for: item.remoteURL) { result in
             switch result {
             case .success(let localURL):
-                print("Attempting to play: \(localURL.path)")
-                do {
-                    try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
-                    try AVAudioSession.sharedInstance().setActive(true)
-                    
-                    audioPlayer = try AVAudioPlayer(contentsOf: localURL)
-                    audioPlayer?.prepareToPlay()
-                    audioPlayer?.play()
+                print("Attempting to load: \(localURL.path)")
+                DispatchQueue.main.async {
+                    playerVM.loadItem(from: localURL)
+                    playerVM.play()
                     currentlyPlayingURL = item.remoteURL
                     print("Playback started for \(item.name)")
-                } catch {
-                    print("Error playing audio from \(localURL.path): \(error.localizedDescription)")
-                    self.playRequestError = "Failed to play \(item.name): \(error.localizedDescription)"
-                    currentlyPlayingURL = nil
                 }
             case .failure(let error):
                 print("Error getting audio URL for \(item.name): \(error.localizedDescription)")
-                self.playRequestError = "Failed to get audio for \(item.name): \(error.localizedDescription)"
-                currentlyPlayingURL = nil
+                DispatchQueue.main.async {
+                    self.playRequestError = "Failed to get audio for \(item.name): \(error.localizedDescription)"
+                    currentlyPlayingURL = nil
+                }
             }
         }
     }

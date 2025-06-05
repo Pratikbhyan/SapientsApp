@@ -13,6 +13,10 @@ import GoogleSignIn // Make sure this is imported
 @main
 struct Sapients_appApp: App {
     @StateObject private var authManager = AuthManager.shared
+    @StateObject private var contentRepository = ContentRepository()
+    @StateObject private var audioPlayer = AudioPlayerService.shared
+    @StateObject private var miniPlayerState = MiniPlayerState(player: AudioPlayerService.shared)
+    @StateObject private var quickNotesRepository = QuickNotesRepository.shared
 
     init() { // Add an init method
         configureGoogleSignIn()
@@ -20,8 +24,9 @@ struct Sapients_appApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Group { // Grouping the conditional content to apply .onOpenURL
-                if authManager.isAuthenticated {
+            ZStack(alignment: .bottom) { // Wrap in ZStack for MiniPlayer overlay
+                Group { // Grouping the conditional content to apply .onOpenURL
+                    if authManager.isAuthenticated {
                     TabView {
                         // Tab 1: Now Playing (loads daily content)
                         DailyContentViewLoader()
@@ -36,13 +41,52 @@ struct Sapients_appApp: App {
                         .tabItem {
                             Label("Library", systemImage: "music.note.list")
                         }
+
+                        // Tab 3: Quick Notes
+                        QuickNotesView()
+                            .tabItem {
+                                Label("Quick Notes", systemImage: "note.text")
+                            }
                     } // Closes TabView
                 } else {
                     LoginView()
                 }
             }
-            .environmentObject(authManager) // Pass AuthManager to the environment
-            .onOpenURL { url in
+
+            // MiniPlayerView is placed here, within the ZStack but outside the Group
+            MiniPlayerView()
+        }
+        .fullScreenCover(isPresented: $miniPlayerState.isPresentingFullPlayer) {
+            // Ensure currentContent is available before presenting ContentDetailView
+            if let contentToPlay = audioPlayer.currentContent {
+                PlayingView(content: contentToPlay, repository: contentRepository, audioPlayer: audioPlayer, isLoadingTranscription: .constant(false), onDismissTapped: {
+                    print("[DEBUG] PlayingView dismiss tapped. Setting isPresentingFullPlayer = false.")
+                    print("[DEBUG] audioPlayer.hasLoadedTrack: \(audioPlayer.hasLoadedTrack)") // This will determine miniPlayerState.isVisible
+                    
+                    miniPlayerState.isPresentingFullPlayer = false
+                    
+                    // miniPlayerState.isVisible is now automatically handled by its publisher listening to audioPlayer.hasLoadedTrack
+                    // After this, if audioPlayer.hasLoadedTrack is true, miniPlayerState.isVisible will become true.
+                    print("[DEBUG] After - miniPlayerState.isPresentingFullPlayer: \(miniPlayerState.isPresentingFullPlayer), miniPlayerState.isVisible (expected from publisher): \(audioPlayer.hasLoadedTrack)")
+                })
+                    // Pass necessary environment objects to the presented view
+                    .environmentObject(authManager)
+                    .environmentObject(contentRepository)
+                    .environmentObject(audioPlayer)
+                    .environmentObject(miniPlayerState)
+                    .environmentObject(quickNotesRepository)
+            } else {
+                // Fallback or empty view if content is somehow nil
+                // This case should ideally not be reached if logic is correct
+                EmptyView()
+            }
+        }
+        .environmentObject(authManager) // Pass AuthManager to the environment
+        .environmentObject(contentRepository)
+        .environmentObject(audioPlayer)
+        .environmentObject(miniPlayerState)
+        .environmentObject(quickNotesRepository)
+        .onOpenURL { url in
                 Task {
                     do {
                         // Let Supabase process the URL (e.g., extract tokens, set session)

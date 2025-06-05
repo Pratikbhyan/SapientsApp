@@ -1,60 +1,26 @@
 import SwiftUI
 import AVFoundation
 
-// MARK: - Font Size Presets
-enum FontSizePreset: CaseIterable, Identifiable {
-    case small, medium, large
-
-    var id: Self { self }
-
-    var size: CGFloat {
-        switch self {
-        case .small: return 18
-        case .medium: return 20 // Current default
-        case .large: return 23
-        }
-    }
-
-    // Optional: If you want the button to show S, M, L
-    /*
-    var displayName: String {
-        switch self {
-        case .small: return "S"
-        case .medium: return "M"
-        case .large: return "L"
-        }
-    }
-    */
-
-    func next() -> FontSizePreset {
-        let allCases = Self.allCases
-        guard let currentIndex = allCases.firstIndex(of: self) else { return .medium }
-        let nextIndex = allCases.index(after: currentIndex)
-        return allCases.indices.contains(nextIndex) ? allCases[nextIndex] : allCases.first!
-    }
-}
 
 struct ContentDetailView: View {
     let content: Content
 
-    @ObservedObject var repository: ContentRepository // Changed from @StateObject
-    @Binding var showMiniPlayer: Bool // Add this binding
+    @ObservedObject var repository: ContentRepository // Passed in
+    @EnvironmentObject private var audioPlayer: AudioPlayerService
+    @EnvironmentObject private var miniState: MiniPlayerState
 
-    init(content: Content, repository: ContentRepository, showMiniPlayer: Binding<Bool>) {
+    init(content: Content, repository: ContentRepository) {
         self.content = content
         self.repository = repository // Assign passed-in repository
-        self._showMiniPlayer = showMiniPlayer // Initialize the binding
         print("[DIAG] ContentDetailView init: Title - \(content.title), Repository instance: \(Unmanaged.passUnretained(repository).toOpaque())")
     }
-    
-    @ObservedObject private var audioPlayer = AudioPlayerService.shared // Changed to @ObservedObject for consistency if it holds significant state, though shared might imply singleton behavior already.
     
     @State private var isPlayingViewActive: Bool = false
     @State private var isLoadingTranscription: Bool = false
 
     private var currentDate: String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM d" 
+        formatter.dateFormat = "MMMM d"
         return formatter.string(from: Date())
     }
     
@@ -75,24 +41,33 @@ struct ContentDetailView: View {
                         audioPlayer: audioPlayer,
                         onPlayTapped: {
                             Task {
-                                // Ensure transcriptions are loaded before switching to playing view
-                                // The check for empty transcriptions is now handled by ContentRepository's internal logic
+                                guard let newAudioURL = repository.getPublicURL(for: content.audioUrl, bucket: "audio") else {
+                                    print("ContentDetailView: Could not get audio URL for \(content.title)")
+                                    // Optionally show an error to the user
+                                    return
+                                }
+
+                                // Load audio only if it's a different URL or not loaded yet
+                                if audioPlayer.currentLoadedURL != newAudioURL || audioPlayer.currentContent?.id != content.id {
+                                    print("ContentDetailView: Loading new audio for \(content.title) from URL: \(newAudioURL)")
+                                    audioPlayer.loadAudio(from: newAudioURL, for: content) // Pass content here
+                                } else {
+                                    print("ContentDetailView: Audio for \(content.title) is already loaded or the same.")
+                                }
+                                
+                                // Always attempt to play.
+                                print("ContentDetailView: Attempting to play audio for \(content.title)")
+                                audioPlayer.play()
+
+                                // Fetch transcriptions
+                                print("ContentDetailView: Fetching transcriptions for \(content.title)")
                                 isLoadingTranscription = true
-                                // Make sure ContentRepository is being correctly injected or initialized
-                                // if this await call relies on an instance that might not be ready.
                                 await repository.fetchTranscriptions(for: content.id, from: content.transcriptionUrl)
                                 isLoadingTranscription = false
-                                // Allow playing if audio is loaded, even if transcriptions fail or are empty
-                                if audioPlayer.duration > 0 {
-                                   audioPlayer.play()
-                                   withAnimation(.easeInOut(duration: 0.3)) {
-                                       isPlayingViewActive = true
-                                       showMiniPlayer = false // Hide miniplayer when full view is active
-                                   }
-                                } else {
-                                    // Handle case where audio might not be ready (duration is 0)
-                                    print("Error: Audio not ready or no transcriptions available.")
-                                    // Optionally, try to load audio again or show an error.
+                                
+                                // Transition to PlayingView
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    isPlayingViewActive = true
                                 }
                             }
                         }
@@ -106,6 +81,7 @@ struct ContentDetailView: View {
                         onDismissTapped: {
                             withAnimation(.easeInOut(duration: 0.3)) {
                                 isPlayingViewActive = false
+                                // miniState.isVisible will be handled by ContentDetailView's onDisappear
                             }
                         }
                     )
@@ -117,13 +93,10 @@ struct ContentDetailView: View {
             .background(isPlayingViewActive ? Color.clear : Color(UIColor.systemBackground))
         }
         .onAppear {
-            // Load audio when the view first appears
-            if let audioUrl = repository.getPublicURL(for: content.audioUrl, bucket: "audio") {
-                audioPlayer.loadAudio(from: audioUrl)
-            }
-            // Pre-fetch transcriptions
+            // Audio is no longer loaded automatically on appear.
+            // It will be loaded on explicit play action.
+            // Fetch transcriptions when the view appears
             Task {
-                // The check for empty transcriptions is now handled by ContentRepository's internal logic
                 isLoadingTranscription = true
                 await repository.fetchTranscriptions(for: content.id, from: content.transcriptionUrl)
                 isLoadingTranscription = false
@@ -139,11 +112,37 @@ struct ContentDetailView: View {
         }
         .edgesIgnoringSafeArea(isPlayingViewActive ? .all : [])
         .preferredColorScheme(isPlayingViewActive ? .dark : nil)
-        .onAppear {
-            print("[DIAG] ContentDetailView ON_APPEAR: Title - \(content.title)")
-        }
         .onDisappear {
-            print("[DIAG] ContentDetailView ON_DISAPPEAR: Title - \(content.title)")
+            // When the full player disappears, the mini-player's visibility should be updated.
+            if audioPlayer.hasLoadedTrack {
+                withAnimation { miniState.isVisible = true }
+            } else {
+                withAnimation { miniState.isVisible = false }
+            }
+
+            // Reset the full player presentation flag if this view is disappearing.
+            // This is important if ContentDetailView was presented by tapping the mini-player.
+            if miniState.isPresentingFullPlayer {
+                miniState.isPresentingFullPlayer = false
+            }
+            print("[DIAG] ContentDetailView ON_DISAPPEAR: Title - \(content.title), miniState.isVisible: \(miniState.isVisible), miniState.isPresentingFullPlayer: \(miniState.isPresentingFullPlayer)")
+        }
+        .onAppear {
+            // show big player => hide mini automatically
+            withAnimation { miniState.isVisible = false }
+            print("[DIAG] ContentDetailView ON_APPEAR: Title - \(content.title)")
+            // Audio is no longer loaded automatically on appear.
+            // It will be loaded on explicit play action.
+            // Fetch transcriptions when the view appears
+            Task {
+                if repository.transcriptions.isEmpty || repository.currentContentIdForTranscriptions != content.id {
+                    print("ContentDetailView: Fetching transcriptions on appear for \(content.title)")
+                    isLoadingTranscription = true
+                    await repository.fetchTranscriptions(for: content.id, from: content.transcriptionUrl)
+                    isLoadingTranscription = false
+                    repository.currentContentIdForTranscriptions = content.id // Remember which content's transcriptions are loaded
+                }
+            }
         }
     }
 }
@@ -151,7 +150,7 @@ struct ContentDetailView: View {
 // MARK: - Blurred Background
 struct BlurredBackgroundView: View {
     // content and repository are no longer strictly needed if we don't use the image
-    // let content: Content 
+    // let content: Content
     // @ObservedObject var repository: ContentRepository
 
     @State private var randomBaseColor: Color = Color.clear // Initial placeholder
@@ -335,252 +334,6 @@ struct InitialView: View {
     } // Closes body of InitialView
 } // Closes struct InitialView
 
-// MARK: - Playing View (More Compact Vertically)
-struct PlayingView: View {
-    let content: Content // Add the content property
-    // The subsequent lines from your file (starting with @ObservedObject var repository: ContentRepository) will now correctly form the properties and body of this PlayingView struct.
-    @ObservedObject var repository: ContentRepository
-    @ObservedObject var audioPlayer: AudioPlayerService
-    @Binding var isLoadingTranscription: Bool
-    var onDismissTapped: () -> Void
-    
-    @State private var currentFontSizePreset: FontSizePreset = .medium // State for font size
-
-    private let fadeOutHeight: CGFloat = 40 
-
-    var body: some View {
-        VStack(spacing: 0) { 
-                HStack {
-                    // Back button
-                    Button(action: onDismissTapped) { // Use the passed-in closure
-                        Image(systemName: "chevron.backward")
-                            .font(.title2)
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-
-                    Spacer() // Pushes font size button to the right
-                    
-                    // Font size adjustment button
-                    Button(action: { currentFontSizePreset = currentFontSizePreset.next() }) {
-                        Image(systemName: "textformat.size")
-                            .font(.title2)
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-                }
-            .padding(.horizontal, 20)
-            .padding(.top, (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first(where: { $0.isKeyWindow })?.safeAreaInsets.top ?? 15)
-            .padding(.bottom, 8) // Apply horizontal padding to the HStack for both buttons
-
-            Group {
-                if isLoadingTranscription && repository.transcriptions.isEmpty { // Show loading only if empty
-                    ProgressView("Loading Transcription...")
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .foregroundColor(.white.opacity(0.8))
-                        .padding()
-                        .frame(maxHeight: .infinity)
-                } else if repository.transcriptions.isEmpty {
-                    Text("No transcription available.")
-                        .font(.callout) 
-                        .foregroundColor(.white.opacity(0.6))
-                        .padding()
-                        .frame(maxHeight: .infinity)
-                } else {
-                    ScrollViewReader { scrollViewProxy in
-                            ScrollView(.vertical, showsIndicators: false) {
-                                // Ensure ScrollView takes full available width
-                            LazyVStack(alignment: .leading, spacing: 8) { 
-                                ForEach(repository.transcriptions.indices, id: \.self) { index in
-                                    let transcription = repository.transcriptions[index]
-                                    let isHighlighted = audioPlayer.currentTranscriptionIndex == index
-                                    let baseFontSize = currentFontSizePreset.size
-                                    let currentTextSize = isHighlighted ? (baseFontSize * 1.4) : baseFontSize // Highlighted text 1.4x larger
-
-                                    Text(transcription.text)
-                                        .fontWeight(isHighlighted ? .bold : .regular)  // Highlighted text bold
-                                        .font(.system(size: currentTextSize)) 
-                                        .foregroundColor(isHighlighted ? .white.opacity(0.95) : .white.opacity(0.7)) // Slightly increased opacity for non-highlighted
-                                        .lineSpacing(isHighlighted ? 8 : 6) // Increased line spacing, more for highlighted 
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .multilineTextAlignment(.leading)
-                                        .fixedSize(horizontal: false, vertical: true)
-                                        .id(index)
-                                        .onTapGesture { // Correctly placed onTapGesture
-                                            audioPlayer.seek(to: TimeInterval(transcription.startTime))
-                                            if !audioPlayer.isPlaying { audioPlayer.play() }
-                                        }
-
-                                    // Add a blank line equivalent after each transcription text block
-                                    if index < repository.transcriptions.count - 1 {
-                                        Text(" ")
-                                            .font(.system(size: baseFontSize * 0.6)) // Adjust size for desired spacing
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                }
-                            }
-                            .padding(.top, 10) 
-                            .padding(.bottom, fadeOutHeight + 5) 
-                        }
-
-                        .mask(
-                            VStack(spacing: 0) {
-                                Rectangle().fill(Color.black)
-                                LinearGradient(
-                                    gradient: Gradient(colors: [Color.black, Color.black.opacity(0.0)]),
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                                .frame(height: fadeOutHeight)
-                            }
-                        )
-                        .onChange(of: audioPlayer.currentTranscriptionIndex) { oldValue, newValue in
-                            let effectiveIndex = newValue // Use newValue from the updated onChange signature
-                            if effectiveIndex >= 0 && effectiveIndex < repository.transcriptions.count {
-                                withAnimation(.easeInOut) {
-                                    scrollViewProxy.scrollTo(effectiveIndex, anchor: .center)
-                                }
-                            }
-                        }
-                    }
-                    .layoutPriority(1)
-                }
-            }
-            .padding(.horizontal, 20) // This padding creates the margins for the transcription block
-            .layoutPriority(1) // Removed fixed height to allow flexible sizing
-
-            // Title has been removed as per request
-
-            DetailedAudioControls(content: content, audioPlayer: audioPlayer)
-                .padding(.horizontal, 20) 
-                .padding(.bottom, (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first(where: { $0.isKeyWindow })?.safeAreaInsets.bottom ?? 8) 
-        }
-        .frame(maxWidth: .infinity) // PlayingView's main VStack takes full width
-        // Padding is now handled by children like the Group below
-        // This main VStack for PlayingView should be full width.
-        .foregroundColor(.white) 
-    }
-}
-
-// MARK: - Detailed Audio Controls
-struct DetailedAudioControls: View {
-    let content: Content // To identify the content for favoriting
-    @State private var controlsOffsetX: CGFloat = 0 // For horizontal offset of the whole panel
-    // @State private var isFavorited: Bool = false // Replaced by FavoritesService
-    @StateObject private var favoritesService = FavoritesService.shared // Use StateObject here
-    @ObservedObject var audioPlayer: AudioPlayerService
-    @State private var sliderValue: Double = 0
-    @State private var isEditingSlider: Bool = false
-    @State private var justSeeked: Bool = false
-
-    private let availableRates: [Float] = [0.75, 1.0, 1.25, 1.5, 2.0]
-
-    var body: some View {
-        VStack(spacing: 10) { // Main VStack for controls
-            Slider(
-                value: $sliderValue,
-                in: 0...max(audioPlayer.duration, 1),
-                onEditingChanged: { editing in
-                    if editing {
-                        isEditingSlider = true
-                        justSeeked = false
-                    } else {
-                        isEditingSlider = false
-                        audioPlayer.seek(to: sliderValue)
-                        justSeeked = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            justSeeked = false
-                        }
-                    }
-                }
-            )
-            .accentColor(.white.opacity(0.8))
-            .padding(.vertical, 5)
-            .onChange(of: audioPlayer.currentTime) { _, newTime in
-                if !isEditingSlider && !justSeeked {
-                    sliderValue = newTime
-                }
-            }
-            .onAppear {
-                sliderValue = audioPlayer.currentTime
-            }
-            
-            HStack { // Time labels
-                Text(formatTime(sliderValue))
-                Spacer()
-                Text(formatTime(audioPlayer.duration))
-            }
-            .font(.caption)
-            .foregroundColor(.white.opacity(0.7))
-            
-            // Outer HStack for centering playback controls and adding favorites button
-            HStack {
-                // Speed Control Menu
-                Menu {
-                    ForEach(availableRates, id: \.self) { rate in
-                        Button(action: {
-                            audioPlayer.setPlaybackRate(to: rate)
-                        }) {
-                            Text(String(format: "%.2fx", rate))
-                        }
-                    }
-                } label: {
-                    Text(String(format: "%.2fx", audioPlayer.currentPlaybackRate))
-                        .font(.caption)
-                        .padding(8)
-                        .background(Color.black.opacity(0.2))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .foregroundColor(.white)
-                }
-                .padding(.leading, 20) // Add some padding so it's not flush with the edge
-                Spacer() // Spacer between speed control and main playback buttons
-
-                // Inner HStack for the playback controls themselves
-                HStack(spacing: 40) {
-                    Button(action: { audioPlayer.seek(to: max(0, audioPlayer.currentTime - 10)) }) {
-                        Image(systemName: "gobackward.10")
-                            .font(.title2)
-                    }
-                    
-                    Button(action: { audioPlayer.togglePlayPause() }) {
-                        Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 58, height: 58)
-                    }
-                    
-                    Button(action: { audioPlayer.seek(to: min(audioPlayer.duration, audioPlayer.currentTime + 10)) }) {
-                        Image(systemName: "goforward.10")
-                            .font(.title2)
-                    }
-                } // <<< Closing brace for Inner Playback Controls HStack
-
-                Spacer() // Right spacer for centering / separating favorites
-
-                Button(action: {
-                    favoritesService.toggleFavorite(contentId: content.id)
-                    print("Favorite button tapped. Is favorited: \(favoritesService.isFavorite(contentId: content.id))")
-                }) {
-                    Image(systemName: favoritesService.isFavorite(contentId: content.id) ? "heart.fill" : "heart")
-                        .font(.title2)
-                        .foregroundColor(favoritesService.isFavorite(contentId: content.id) ? .pink : .white)
-                }
-                .padding(.trailing, 20) // Keep favorite button from edge
-
-            } // End of Outer HStack
-            .foregroundColor(.white.opacity(0.9)) // Applied to Outer HStack
-            .offset(x: controlsOffsetX) // Applied to Outer HStack
-            
-        } // End of Main VStack
-        .padding(.top, 20)
-        .padding(.bottom, 5)
-    } // End of body
-    
-    private func formatTime(_ time: TimeInterval) -> String {
-        let minutes = Int(time) / 60
-        let seconds = Int(time) % 60
-        return String(format: "%d:%02d", minutes, seconds)
-    }
-} // End of DetailedAudioControls struct
-
 
 #if DEBUG
 struct ContentDetailView_Previews_FinalLayout: PreviewProvider {
@@ -611,12 +364,12 @@ struct ContentDetailView_Previews_FinalLayout: PreviewProvider {
         // to accept repository as a parameter or use .environmentObject for previews.
         let mockRepo = ContentRepository() // Create a mock repository for the preview
         // Optionally populate mockRepo with data if needed for the preview
-        // mockRepo.transcriptions = [ ... ] 
+        // mockRepo.transcriptions = [ ... ]
 
-        ContentDetailView(content: mockContent, repository: mockRepo, showMiniPlayer: .constant(false))
+        ContentDetailView(content: mockContent, repository: mockRepo)
             // Example of how you might inject for preview if sub-views need it:
             // .environmentObject(AudioPlayerService.shared)
             // .environmentObject(mockRepo) // if repository was an EnvironmentObject
     }
 }
-#endif 
+#endif

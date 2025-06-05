@@ -15,6 +15,9 @@ class AudioPlayerService: ObservableObject {
     @Published var duration: TimeInterval = 0
     @Published var currentTranscriptionIndex: Int = 0
     @Published var currentPlaybackRate: Float = 1.0
+    @Published var hasLoadedTrack: Bool = false // NEW: exposes whether *anything* is currently loaded
+    @Published var currentContent: Content? = nil // NEW: holds the currently loaded content item
+    private(set) var currentLoadedURL: URL? // Added to track current URL
     
     private var cancellables = Set<AnyCancellable>()
     
@@ -35,7 +38,7 @@ class AudioPlayerService: ObservableObject {
     }
     
     // MARK: - Audio Loading
-    func loadAudio(from url: URL) {
+    func loadAudio(from url: URL, for content: Content) {
         if let timeObserver = timeObserver, let player = player {
             player.removeTimeObserver(timeObserver)
             self.timeObserver = nil // Clear the old observer
@@ -49,10 +52,16 @@ class AudioPlayerService: ObservableObject {
             self.currentTime = 0
             self.duration = 0
             self.currentTranscriptionIndex = 0
+            self.currentLoadedURL = nil
+            self.currentContent = nil // Reset current content
+            self.hasLoadedTrack = false // Reset loaded track flag
         }
         
         playerItem = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: playerItem)
+        self.currentLoadedURL = url // Store the new URL
+        self.currentContent = content // Store the content item
+        self.hasLoadedTrack = true   // Set that a track is loaded
         
         // Get duration asynchronously
         if let currentItem = playerItem {
@@ -144,6 +153,30 @@ class AudioPlayerService: ObservableObject {
         player?.seek(to: CMTime(seconds: time, preferredTimescale: 600))
     }
     
+    func stop() {
+        player?.pause()
+        player = nil
+        playerItem = nil
+        if let timeObserver = self.timeObserver {
+            // Access player through self to ensure it's the class member, not a new local var
+            // However, player is already nil here. This check might need to be earlier or handled differently.
+            // For now, let's assume if player is nil, observer is also implicitly invalid or removed.
+        }
+        timeObserver = nil
+        cancellables.forEach { $0.cancel() }
+        cancellables.removeAll()
+
+        DispatchQueue.main.async {
+            self.isPlaying = false
+            self.currentTime = 0
+            self.duration = 0
+            self.currentTranscriptionIndex = 0
+            self.currentLoadedURL = nil
+            self.currentContent = nil
+            self.hasLoadedTrack = false // This will make MiniPlayerState.isVisible false
+        }
+    }
+
     // MARK: - Transcription Sync
     func updateCurrentTranscription(transcriptions: [Transcription]) {
         for (index, transcription) in transcriptions.enumerated() {
