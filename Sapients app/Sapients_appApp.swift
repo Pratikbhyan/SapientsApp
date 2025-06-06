@@ -9,6 +9,11 @@ import SwiftUI
 import Supabase
 import GoogleSignIn
 
+// Enum to identify tabs
+enum TabIdentifier {
+    case nowPlaying, library, quickNotes
+}
+
 @main
 struct Sapients_appApp: App {
     @StateObject private var authManager = AuthManager.shared
@@ -16,6 +21,7 @@ struct Sapients_appApp: App {
     @StateObject private var audioPlayer = AudioPlayerService.shared
     @StateObject private var miniPlayerState = MiniPlayerState(player: AudioPlayerService.shared)
     @StateObject private var quickNotesRepository = QuickNotesRepository.shared
+    @State private var selectedTab: TabIdentifier = .nowPlaying // Default tab
 
     init() {
         configureGoogleSignIn()
@@ -24,11 +30,12 @@ struct Sapients_appApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack(alignment: .bottom) {
-                Group {
+                    Group {
                     if authManager.isAuthenticated {
-                        TabView {
+                        TabView(selection: $selectedTab) {
                             // Tab 1: Now Playing (loads daily content)
                             DailyContentViewLoader()
+                                .tag(TabIdentifier.nowPlaying)
                                 .tabItem {
                                     Label("Now Playing", systemImage: "play.circle.fill")
                                 }
@@ -37,15 +44,27 @@ struct Sapients_appApp: App {
                             NavigationView {
                                 ContentListView()
                             }
+                            .tag(TabIdentifier.library)
                             .tabItem {
                                 Label("Library", systemImage: "music.note.list")
                             }
 
                             // Tab 3: Quick Notes
                             QuickNotesView()
+                                .tag(TabIdentifier.quickNotes)
                                 .tabItem {
                                     Label("Quick Notes", systemImage: "note.text")
                                 }
+                        }
+                        .onChange(of: selectedTab) { _, newTab in
+                            if newTab == .nowPlaying {
+                                miniPlayerState.isVisible = false
+                            } else {
+                                // For other tabs, MiniPlayerState's internal logic
+                                // (based on hasLoadedTrack) will determine actual visibility.
+                                // We just signal that it *can* be visible from the tab's perspective.
+                                miniPlayerState.isVisible = audioPlayer.hasLoadedTrack
+                            }
                         }
                     } else {
                         LoginView()
@@ -63,11 +82,14 @@ struct Sapients_appApp: App {
                 }
 
                 // MiniPlayerView overlay
-                if miniPlayerState.isVisible {
+                // Hide if the full player is presented, regardless of other visibility flags.
+                // MiniPlayerView overlay
+                // Show if isVisible is true AND the full player is NOT being presented.
+                if miniPlayerState.isVisible && !miniPlayerState.isPresentingFullPlayer {
                     MiniPlayerView()
                 }
             }
-            .fullScreenCover(isPresented: $miniPlayerState.isPresentingFullPlayer) {
+            .sheet(isPresented: $miniPlayerState.isPresentingFullPlayer) {
                 if let contentToPlay = audioPlayer.currentContent {
                     ZStack {
                         // Add consistent background for miniplayer-opened PlayingView
@@ -85,11 +107,19 @@ struct Sapients_appApp: App {
                         )
                     }
                     .preferredColorScheme(.dark)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
                     .environmentObject(authManager)
                     .environmentObject(contentRepository)
                     .environmentObject(audioPlayer)
                     .environmentObject(miniPlayerState)
                     .environmentObject(quickNotesRepository)
+                } else {
+                    Color.black
+                        .onAppear {
+                            print("ERROR: PlayingView presented without content!")
+                            miniPlayerState.isPresentingFullPlayer = false
+                        }
                 }
             }
             .environmentObject(authManager)

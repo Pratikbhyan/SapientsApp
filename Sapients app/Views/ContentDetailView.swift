@@ -1,6 +1,6 @@
 import SwiftUI
 import AVFoundation
-
+import UIKit
 
 struct ContentDetailView: View {
     let content: Content
@@ -15,7 +15,7 @@ struct ContentDetailView: View {
         print("[DIAG] ContentDetailView init: Title - \(content.title)")
     }
     
-    @State private var isPlayingViewActive: Bool = false
+    @State private var showPlayer = false
     @State private var isLoadingTranscription: Bool = false
 
     private var currentDate: String {
@@ -26,14 +26,9 @@ struct ContentDetailView: View {
     
     var body: some View {
         ZStack {
-            // Blurred background, shown only when PlayingView is active
-            if isPlayingViewActive {
-                BlurredBackgroundView() // No longer needs content/repository
-            }
-
-            // Main content area
-            VStack(alignment: .leading, spacing: 0) { // Reverted to .leading, children will manage padding
-                if !isPlayingViewActive {
+            // Main content area for InitialView
+            VStack(alignment: .leading, spacing: 0) { 
+                // InitialView is now always the direct content of ContentDetailView's VStack
                     InitialView(
                         content: content,
                         currentDate: currentDate,
@@ -43,48 +38,49 @@ struct ContentDetailView: View {
                             Task {
                                 guard let newAudioURL = repository.getPublicURL(for: content.audioUrl, bucket: "audio") else {
                                     print("ContentDetailView: Could not get audio URL for \(content.title)")
-                                    // Optionally show an error to the user
                                     return
                                 }
 
-                                // Load audio only if it's a different URL or not loaded yet
-                                audioPlayer.loadAudio(from: newAudioURL, for: content) // Pass content here
+                                // Load audio first to set currentContent
+                                audioPlayer.loadAudio(from: newAudioURL, for: content)
                                 audioPlayer.play()
+
+                                showPlayer = true
 
                                 // Fetch transcriptions
                                 print("ContentDetailView: Fetching transcriptions for \(content.title)")
-                                isLoadingTranscription = true
+                                self.isLoadingTranscription = true
                                 await repository.fetchTranscriptions(for: content.id, from: content.transcriptionUrl)
-                                isLoadingTranscription = false
-                                
-                                // Transition to PlayingView
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    isPlayingViewActive = true
-                                }
+                                self.isLoadingTranscription = false
                             }
                         }
                     )
-                } else {
-                    PlayingView(
-                        content: content,
-                        repository: repository,
-                        audioPlayer: audioPlayer,
-                        isLoadingTranscription: $isLoadingTranscription,
-                        onDismissTapped: {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                isPlayingViewActive = false
-                                // miniState.isVisible will be handled by ContentDetailView's onDisappear
-                            }
-                        }
-                    )
-                }
             }
             .frame(maxWidth: .infinity) // Ensure this VStack takes full width
-            // Apply a background to the VStack for InitialView to prevent transparency issues
-            // Clear background for PlayingView as it has its own blurred background.
-            .background(isPlayingViewActive ? Color.clear : Color(UIColor.systemBackground))
+            .background(Color(UIColor.systemBackground)) // Standard background for ContentDetailView
         }
+        .sheet(isPresented: $showPlayer) {
+            ZStack {
+                BlurredBackgroundView()
+                    .edgesIgnoringSafeArea(.all)
+                
+                PlayingView(
+                    content: content,
+                    repository: repository,
+                    audioPlayer: audioPlayer,
+                    isLoadingTranscription: $isLoadingTranscription,
+                    onDismissTapped: { showPlayer = false }
+                )
+            }
+            .preferredColorScheme(.dark)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+        // Tab Bar Hiding Logic REMOVED from ContentDetailView
         .onAppear {
+            // UIKit TabBar hiding logic REMOVED
+            // Hide mini player when detail view appears
+            miniState.isVisible = false
             // Hide mini player when detail view appears
             miniState.isVisible = false
             
@@ -102,18 +98,12 @@ struct ContentDetailView: View {
             // Mini player visibility is now handled automatically by MiniPlayerState
             // when hasLoadedTrack is true
             
-            if miniState.isPresentingFullPlayer {
-                miniState.isPresentingFullPlayer = false
-            }
+            // Logic that incorrectly set miniState.isPresentingFullPlayer to false was REMOVED from here.
+            // PlayingView's presentation should be managed by its own dismiss action or by global state changes directly tied to user intent.
             print("[DIAG] ContentDetailView ON_DISAPPEAR: Title - \(content.title), miniState.isVisible: \(miniState.isVisible), miniState.isPresentingFullPlayer: \(miniState.isPresentingFullPlayer)")
         }
-        .onChange(of: audioPlayer.currentTime) { _, _ in
-            if isPlayingViewActive {
-                audioPlayer.updateCurrentTranscription(transcriptions: repository.transcriptions)
-            }
-        }
-        .edgesIgnoringSafeArea(isPlayingViewActive ? .all : [])
-        .preferredColorScheme(isPlayingViewActive ? .dark : nil)
+        .edgesIgnoringSafeArea(.all) // InitialView in ContentDetailView might want to manage its own safe areas
+        // .preferredColorScheme(isPlayingViewActive ? .dark : nil) // Color scheme is now static or handled by InitialView / PlayingView
     }
 }
 

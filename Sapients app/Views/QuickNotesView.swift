@@ -15,10 +15,18 @@ struct QuickNotesView: View {
     
     @EnvironmentObject private var miniPlayerState: MiniPlayerState
     @State private var miniPlayerHeight: CGFloat = 70 // Approximate height of mini player
+    @State private var quickNotesHidMiniPlayer: Bool = false // Track if this view hid the miniplayer
     
     private let skyBlue = Color(red: 135/255.0, green: 206/255.0, blue: 235/255.0)
     private let noteSectionsFileName = "noteSections.json"
     private let lastActiveNoteDateKey = "lastActiveNoteDateKey"
+
+    // MARK: - Computed Properties
+    
+    private var wordCount: Int {
+        let words = noteText.components(separatedBy: .whitespacesAndNewlines)
+        return words.filter { !$0.isEmpty }.count
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -96,13 +104,13 @@ struct QuickNotesView: View {
                                     TextEditor(text: $noteText)
                                         .frame(minHeight: 200, maxHeight: .infinity)
                                         .padding(.horizontal, 20)
-                                        .padding(.bottom, calculateBottomPadding())
+                                        .padding(.bottom, 20) // Fixed padding
                                         .focused($isTextEditorFocused)
                                         .onChange(of: noteText) {
                                             isEditing = true
                                             saveTodaysNote()
                                             
-                                            // Only auto-scroll if text would be hidden
+                                            // Only auto-scroll if content might be hidden behind keyboard
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                                 if shouldScrollToBottom(availableHeight: geometry.size.height) {
                                                     withAnimation(.easeOut(duration: 0.3)) {
@@ -169,7 +177,7 @@ struct QuickNotesView: View {
                             withAnimation(.easeInOut) {
                                 proxy.scrollTo("today", anchor: .top)
                             }
-                            isTextEditorFocused = true
+                            isTextEditorFocused = true // Directly set focus as in the 'good' version
                         }
                     }
                     .onChange(of: geometry.size.height) { _, newHeight in
@@ -177,8 +185,8 @@ struct QuickNotesView: View {
                     }
                     .onChange(of: isTextEditorFocused) { _, newFocusedState in
                         if newFocusedState {
-                            // Don't auto-scroll when focusing, let user see where they are
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            // When text editor gains focus, only scroll if needed
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { // Ensure keyboard height is updated
                                 if shouldScrollToBottom(availableHeight: geometry.size.height) {
                                     withAnimation(.easeOut(duration: 0.3)) {
                                         proxy.scrollTo("today-bottom", anchor: .bottom)
@@ -188,9 +196,9 @@ struct QuickNotesView: View {
                         }
                     }
                     .onChange(of: keyboardHeight) { _, newKeyboardHeight in
-                        // Only scroll when keyboard appears and text would be hidden
+                        // When keyboard appears/disappears, only scroll if content would be hidden
                         if newKeyboardHeight > 0 && isTextEditorFocused {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                 if shouldScrollToBottom(availableHeight: geometry.size.height) {
                                     withAnimation(.easeOut(duration: 0.3)) {
                                         proxy.scrollTo("today-bottom", anchor: .bottom)
@@ -217,19 +225,36 @@ struct QuickNotesView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
             if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
                 withAnimation(.easeOut(duration: 0.3)) {
-                    keyboardHeight = keyboardFrame.height
-                    miniPlayerState.keyboardHeight = keyboardFrame.height
+                    self.keyboardHeight = keyboardFrame.height // Local state for scrolling
+                    miniPlayerState.keyboardHeight = keyboardFrame.height // For MiniPlayerState if it needs it
+                    if miniPlayerState.isVisible {
+                        miniPlayerState.isVisible = false
+                        self.quickNotesHidMiniPlayer = true
+                    }
                 }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             withAnimation(.easeOut(duration: 0.3)) {
-                keyboardHeight = 0
-                miniPlayerState.keyboardHeight = 0
+                self.keyboardHeight = 0 // Local state for scrolling
+                miniPlayerState.keyboardHeight = 0 // For MiniPlayerState
+                if self.quickNotesHidMiniPlayer {
+                    miniPlayerState.isVisible = true
+                    self.quickNotesHidMiniPlayer = false
+                }
             }
         }
         .onDisappear {
             saveNoteSections()
+            // If QuickNotesView hid the miniplayer and is now disappearing,
+            // try to restore miniplayer visibility and reset keyboard height.
+            if self.quickNotesHidMiniPlayer {
+                miniPlayerState.isVisible = true
+                self.quickNotesHidMiniPlayer = false
+            }
+            if miniPlayerState.keyboardHeight > 0 && keyboardHeight > 0 { // If this view's keyboard was up
+                miniPlayerState.keyboardHeight = 0
+            }
         }
         // Mini-player overlay moved to ContentView.swift
         .alert(isPresented: $showingDeleteConfirmation) {
@@ -248,47 +273,24 @@ struct QuickNotesView: View {
         }
     }
     
-    // MARK: - Computed Properties
-    
-    private var wordCount: Int {
-        let words = noteText.components(separatedBy: .whitespacesAndNewlines)
-        return words.filter { !$0.isEmpty }.count
-    }
-    
-    private func calculateBottomPadding() -> CGFloat {
-        var padding: CGFloat = 20 // Base padding
-        
-        if keyboardHeight > 0 {
-            padding += keyboardHeight
-        }
-        
-        if miniPlayerState.isVisible {
-            padding += miniPlayerHeight
-        }
-        
-        return padding
-    }
-    
     // MARK: - Smart Scrolling Function
 
     private func shouldScrollToBottom(availableHeight: CGFloat) -> Bool {
-        guard isTextEditorFocused else {
+        // Only consider scrolling if the text editor for today's note is focused
+        // and the keyboard is actually visible.
+        guard isTextEditorFocused && keyboardHeight > 0 else {
             return false
         }
 
-        var occupiedHeight: CGFloat = 0
-        
-        if keyboardHeight > 0 {
-            occupiedHeight += keyboardHeight
-        }
-        
-        if miniPlayerState.isVisible {
-            occupiedHeight += miniPlayerHeight
-        }
-        
-        let visibleAreaHeight = availableHeight - occupiedHeight
-        // More conservative scrolling - only scroll if content is significantly larger
-        return scrollViewContentHeight > (visibleAreaHeight + 100)
+        // Calculate the height of the visible area within the ScrollView
+        // after accounting for the keyboard.
+        let visibleAreaHeight = availableHeight - keyboardHeight
+
+        // If the total content height within the ScrollView is greater than
+        // this calculated visible area height, it means some part of the content
+        // (potentially the bottom of the "Today" TextEditor where the user is typing)
+        // might be obscured or pushed off-screen. In such cases, scrolling is needed.
+        return scrollViewContentHeight > visibleAreaHeight
     }
     
     // MARK: - Initialization

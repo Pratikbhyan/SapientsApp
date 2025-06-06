@@ -141,7 +141,7 @@ struct ContentListView: View {
             .sheet(item: $presentingContentDetail) { contentToPresent in
                 ContentDetailView(content: contentToPresent, repository: repository)
                     .environmentObject(audioPlayer)
-                    .environmentObject(MiniPlayerState(player: audioPlayer))
+                    .environmentObject(miniPlayerState)
                     .onDisappear {
                         print("[DIAG] ContentDetailView via sheet DISMISSED")
                         // Mini-player visibility is now handled globally by MiniPlayerState and Sapients_appApp

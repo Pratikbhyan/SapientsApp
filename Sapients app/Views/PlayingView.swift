@@ -1,6 +1,7 @@
 import SwiftUI
-import AVFoundation 
-import UIKit 
+import AVFoundation
+import UIKit
+
 
 enum FontSizePreset: CaseIterable, Identifiable {
     case small, medium, large
@@ -169,6 +170,24 @@ struct PlayingView: View {
         }
         .onChange(of: audioPlayer.currentTime) { _, _ in
             audioPlayer.updateCurrentTranscription(transcriptions: repository.transcriptions)
+        }
+        .toolbar(.hidden, for: .tabBar) // iOS 16+
+        .ignoresSafeArea()
+        .onAppear {
+            if #unavailable(iOS 16.0) {
+                UITabBar.appearance().isHidden = true
+            }
+            miniPlayerState.isVisible = false // Ensure miniplayer is hidden when PlayingView appears
+            // print("[DIAG] PlayingView ON_APPEAR: miniPlayerState.isVisible set to false. TabBar hidden (iOS < 16): \(UITabBar.appearance().isHidden)")
+        }
+        .onDisappear {
+            if #unavailable(iOS 16.0) {
+                UITabBar.appearance().isHidden = false
+            }
+            // Show mini player again only if a track is loaded AND full player isn't currently presented.
+            // When PlayingView disappears, isPresentingFullPlayer should be false.
+            miniPlayerState.isVisible = audioPlayer.hasLoadedTrack && !miniPlayerState.isPresentingFullPlayer
+            // print("[DIAG] PlayingView ON_DISAPPEAR: miniPlayerState.isVisible set to \(miniPlayerState.isVisible). TabBar shown (iOS < 16): \(!UITabBar.appearance().isHidden)")
         }
     }
 }
