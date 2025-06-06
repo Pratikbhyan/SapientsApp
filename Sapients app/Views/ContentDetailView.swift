@@ -34,6 +34,7 @@ struct ContentDetailView: View {
                         currentDate: currentDate,
                         repository: repository,
                         audioPlayer: audioPlayer,
+                        showPlayer: $showPlayer,
                         onPlayTapped: {
                             Task {
                                 guard let newAudioURL = repository.getPublicURL(for: content.audioUrl, bucket: "audio") else {
@@ -81,8 +82,6 @@ struct ContentDetailView: View {
             // UIKit TabBar hiding logic REMOVED
             // Hide mini player when detail view appears
             miniState.isVisible = false
-            // Hide mini player when detail view appears
-            miniState.isVisible = false
             
             Task {
                 if repository.transcriptions.isEmpty || repository.currentContentIdForTranscriptions != content.id {
@@ -95,11 +94,10 @@ struct ContentDetailView: View {
             }
         }
         .onDisappear {
-            // Mini player visibility is now handled automatically by MiniPlayerState
-            // when hasLoadedTrack is true
+            if audioPlayer.hasLoadedTrack && !miniState.isPresentingFullPlayer {
+                miniState.isVisible = true
+            }
             
-            // Logic that incorrectly set miniState.isPresentingFullPlayer to false was REMOVED from here.
-            // PlayingView's presentation should be managed by its own dismiss action or by global state changes directly tied to user intent.
             print("[DIAG] ContentDetailView ON_DISAPPEAR: Title - \(content.title), miniState.isVisible: \(miniState.isVisible), miniState.isPresentingFullPlayer: \(miniState.isPresentingFullPlayer)")
         }
         .edgesIgnoringSafeArea(.all) // InitialView in ContentDetailView might want to manage its own safe areas
@@ -159,6 +157,7 @@ struct InitialView: View {
     let currentDate: String
     @ObservedObject var repository: ContentRepository
     @ObservedObject var audioPlayer: AudioPlayerService
+    @Binding var showPlayer: Bool
     var onPlayTapped: () -> Void
 
     @State private var paddingBelowDescription: CGFloat = 5.0
@@ -241,10 +240,32 @@ struct InitialView: View {
                             .padding(.bottom, paddingBelowDescription)
 
                             VStack {
-                                Button(action: onPlayTapped) {
+                                Button(action: {
+                                    if audioPlayer.currentContent?.id == content.id && audioPlayer.isPlaying {
+                                        audioPlayer.pause()
+                                    } else if audioPlayer.currentContent?.id == content.id && !audioPlayer.isPlaying {
+                                        showPlayer = true
+                                        audioPlayer.play()
+                                    } else {
+                                        // Different content - start playing this content
+                                        onPlayTapped()
+                                    }
+                                }) {
                                     HStack {
-                                        Image(systemName: "play.fill")
-                                        Text("Play Episode")
+                                        let isCurrentlyPlaying = audioPlayer.currentContent?.id == content.id && audioPlayer.isPlaying
+                                        let isCurrentButPaused = audioPlayer.currentContent?.id == content.id && !audioPlayer.isPlaying
+                                        
+                                        Image(systemName: isCurrentlyPlaying ? "pause.fill" : "play.fill")
+                                        
+                                        Text({
+                                            if isCurrentlyPlaying {
+                                                return "Pause Episode"
+                                            } else if isCurrentButPaused {
+                                                return "Resume Episode"
+                                            } else {
+                                                return "Play Episode"
+                                            }
+                                        }())
                                             .fontWeight(.semibold)
                                     }
                                     .padding(.vertical, 12)

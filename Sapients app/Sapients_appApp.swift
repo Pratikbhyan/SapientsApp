@@ -84,8 +84,8 @@ struct Sapients_appApp: App {
                 // MiniPlayerView overlay
                 // Hide if the full player is presented, regardless of other visibility flags.
                 // MiniPlayerView overlay
-                // Show if isVisible is true AND the full player is NOT being presented.
-                if miniPlayerState.isVisible && !miniPlayerState.isPresentingFullPlayer {
+                // Show if isVisible is true AND the full player is NOT being presented AND not on Now Playing tab
+                if miniPlayerState.isVisible && !miniPlayerState.isPresentingFullPlayer && selectedTab != .nowPlaying {
                     MiniPlayerView()
                 }
             }
