@@ -7,8 +7,7 @@
 
 import SwiftUI
 import Supabase
-
-import GoogleSignIn // Make sure this is imported
+import GoogleSignIn
 
 @main
 struct Sapients_appApp: App {
@@ -18,110 +17,102 @@ struct Sapients_appApp: App {
     @StateObject private var miniPlayerState = MiniPlayerState(player: AudioPlayerService.shared)
     @StateObject private var quickNotesRepository = QuickNotesRepository.shared
 
-    init() { // Add an init method
+    init() {
         configureGoogleSignIn()
     }
 
     var body: some Scene {
         WindowGroup {
-            ZStack(alignment: .bottom) { // Wrap in ZStack for MiniPlayer overlay
-                Group { // Grouping the conditional content to apply .onOpenURL
+            ZStack(alignment: .bottom) {
+                Group {
                     if authManager.isAuthenticated {
-                    TabView {
-                        // Tab 1: Now Playing (loads daily content)
-                        DailyContentViewLoader()
+                        TabView {
+                            // Tab 1: Now Playing (loads daily content)
+                            DailyContentViewLoader()
+                                .tabItem {
+                                    Label("Now Playing", systemImage: "play.circle.fill")
+                                }
+
+                            // Tab 2: Content List (Browse)
+                            NavigationView {
+                                ContentListView()
+                            }
                             .tabItem {
-                                Label("Now Playing", systemImage: "play.circle.fill")
+                                Label("Library", systemImage: "music.note.list")
                             }
 
-                        // Tab 2: Content List (Browse)
-                        NavigationView { // This NavigationView is for the Library tab
-                            ContentListView() // ContentListView now correctly has no internal NavigationView
+                            // Tab 3: Quick Notes
+                            QuickNotesView()
+                                .tabItem {
+                                    Label("Quick Notes", systemImage: "note.text")
+                                }
                         }
-                        .tabItem {
-                            Label("Library", systemImage: "music.note.list")
+                    } else {
+                        LoginView()
+                    }
+                }
+                .onOpenURL { url in
+                    Task {
+                        do {
+                            try await SupabaseManager.shared.client.auth.session(from: url)
+                            print("Deep link processed by Supabase via onOpenURL. AuthManager will handle state update.")
+                        } catch {
+                            print("Error processing deeplink in onOpenURL: \(error.localizedDescription)")
                         }
+                    }
+                }
 
-                        // Tab 3: Quick Notes
-                        QuickNotesView()
-                            .tabItem {
-                                Label("Quick Notes", systemImage: "note.text")
-                            }
-                    } // Closes TabView
-                } else {
-                    LoginView()
+                // MiniPlayerView overlay
+                if miniPlayerState.isVisible {
+                    MiniPlayerView()
                 }
             }
-
-            // MiniPlayerView is placed here, within the ZStack but outside the Group
-            MiniPlayerView()
-        }
-        .fullScreenCover(isPresented: $miniPlayerState.isPresentingFullPlayer) {
-            // Ensure currentContent is available before presenting ContentDetailView
-            if let contentToPlay = audioPlayer.currentContent {
-                PlayingView(content: contentToPlay, repository: contentRepository, audioPlayer: audioPlayer, isLoadingTranscription: .constant(false), onDismissTapped: {
-                    print("[DEBUG] PlayingView dismiss tapped. Setting isPresentingFullPlayer = false.")
-                    print("[DEBUG] audioPlayer.hasLoadedTrack: \(audioPlayer.hasLoadedTrack)") // This will determine miniPlayerState.isVisible
-                    
-                    miniPlayerState.isPresentingFullPlayer = false
-                    
-                    // miniPlayerState.isVisible is now automatically handled by its publisher listening to audioPlayer.hasLoadedTrack
-                    // After this, if audioPlayer.hasLoadedTrack is true, miniPlayerState.isVisible will become true.
-                    print("[DEBUG] After - miniPlayerState.isPresentingFullPlayer: \(miniPlayerState.isPresentingFullPlayer), miniPlayerState.isVisible (expected from publisher): \(audioPlayer.hasLoadedTrack)")
-                })
-                    // Pass necessary environment objects to the presented view
+            .fullScreenCover(isPresented: $miniPlayerState.isPresentingFullPlayer) {
+                if let contentToPlay = audioPlayer.currentContent {
+                    ZStack {
+                        // Add consistent background for miniplayer-opened PlayingView
+                        BlurredBackgroundView()
+                            .edgesIgnoringSafeArea(.all)
+                        
+                        PlayingView(
+                            content: contentToPlay,
+                            repository: contentRepository,
+                            audioPlayer: audioPlayer,
+                            isLoadingTranscription: .constant(false),
+                            onDismissTapped: {
+                                miniPlayerState.isPresentingFullPlayer = false
+                            }
+                        )
+                    }
+                    .preferredColorScheme(.dark)
                     .environmentObject(authManager)
                     .environmentObject(contentRepository)
                     .environmentObject(audioPlayer)
                     .environmentObject(miniPlayerState)
                     .environmentObject(quickNotesRepository)
-            } else {
-                // Fallback or empty view if content is somehow nil
-                // This case should ideally not be reached if logic is correct
-                EmptyView()
-            }
-        }
-        .environmentObject(authManager) // Pass AuthManager to the environment
-        .environmentObject(contentRepository)
-        .environmentObject(audioPlayer)
-        .environmentObject(miniPlayerState)
-        .environmentObject(quickNotesRepository)
-        .onOpenURL { url in
-                Task {
-                    do {
-                        // Let Supabase process the URL (e.g., extract tokens, set session)
-                        try await SupabaseManager.shared.client.auth.session(from: url)
-                        
-                        // AuthManager's authStateChanges listener should automatically update the isAuthenticated state.
-                        // If direct re-check is needed after processing URL, you could call:
-                        // await authManager.checkInitialAuthState()
-                        print("Deep link processed by Supabase via onOpenURL. AuthManager will handle state update.")
-                    } catch {
-                        print("Error processing deeplink in onOpenURL: \(error.localizedDescription)")
-                        // AuthManager should also reflect this error if the session becomes invalid or nil.
-                    }
                 }
             }
+            .environmentObject(authManager)
+            .environmentObject(contentRepository)
+            .environmentObject(audioPlayer)
+            .environmentObject(miniPlayerState)
+            .environmentObject(quickNotesRepository)
         }
     }
 
     private func configureGoogleSignIn() {
         guard let clientID = Bundle.main.object(forInfoDictionaryKey: "CLIENT_ID") as? String ??
-                             Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String else { // Check main Info.plist first
+                             Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String else {
             
-            // Fallback to trying to read from GoogleService-Info.plist path if direct read fails
-            // IMPORTANT: Ensure your GoogleService-Info.plist name is correct here
             if let path = Bundle.main.path(forResource: "GoogleService-Info 2", ofType: "plist"),
                let dict = NSDictionary(contentsOfFile: path),
                let idFromPlist = dict["CLIENT_ID"] as? String {
                 GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: idFromPlist)
                 print("Google Sign-In configured with CLIENT_ID from GoogleService-Info.plist: \(idFromPlist)")
             } else {
-                // If still not found, use the hardcoded one as a last resort (less ideal)
-                let hardcodedClientID = "453563946840-cg1tu8jkc4uomltcqooc5adifkqg8f4i.apps.googleusercontent.com" // Use your actual ID
+                let hardcodedClientID = "453563946840-cg1tu8jkc4uomltcqooc5adifkqg8f4i.apps.googleusercontent.com"
                 GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: hardcodedClientID)
                 print("Google Sign-In configured with HARDCODED CLIENT_ID: \(hardcodedClientID). Consider fixing Info.plist or GoogleService-Info.plist.")
-                 //assertionFailure("Could not find CLIENT_ID in GoogleService-Info.plist or main Info.plist for Google Sign-In configuration.")
             }
             return
         }

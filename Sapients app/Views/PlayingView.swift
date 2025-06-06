@@ -1,8 +1,7 @@
 import SwiftUI
-import AVFoundation // Likely needed for AudioPlayerService and time formatting
-import UIKit // For UIApplication
+import AVFoundation 
+import UIKit 
 
-// MARK: - Font Size Presets
 enum FontSizePreset: CaseIterable, Identifiable {
     case small, medium, large
 
@@ -11,21 +10,10 @@ enum FontSizePreset: CaseIterable, Identifiable {
     var size: CGFloat {
         switch self {
         case .small: return 18
-        case .medium: return 20 // Current default
+        case .medium: return 20 
         case .large: return 23
         }
     }
-
-    // Optional: If you want the button to show S, M, L
-    /*
-    var displayName: String {
-        switch self {
-        case .small: return "S"
-        case .medium: return "M"
-        case .large: return "L"
-        }
-    }
-    */
 
     func next() -> FontSizePreset {
         let allCases = Self.allCases
@@ -35,34 +23,35 @@ enum FontSizePreset: CaseIterable, Identifiable {
     }
 }
 
-// MARK: - Playing View (More Compact Vertically)
 struct PlayingView: View {
-    let content: Content // Add the content property
+    let content: Content 
     @ObservedObject var repository: ContentRepository
     @ObservedObject var audioPlayer: AudioPlayerService
-    @EnvironmentObject var miniPlayerState: MiniPlayerState // Add direct access to miniPlayerState
+    @EnvironmentObject var miniPlayerState: MiniPlayerState 
     @Binding var isLoadingTranscription: Bool
     var onDismissTapped: () -> Void
     
-    @State private var currentFontSizePreset: FontSizePreset = .medium // State for font size
-
+    @State private var currentFontSizePreset: FontSizePreset = .medium 
+    @State private var dragOffset: CGFloat = 0
+    
     private let fadeOutHeight: CGFloat = 40
+    private let dismissThreshold: CGFloat = 100
 
     var body: some View {
         VStack(spacing: 0) {
-                HStack {
-                    Button(action: onDismissTapped) { 
-                        Image(systemName: "chevron.backward")
-                            .font(.title2)
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-                    Spacer() 
-                    Button(action: { currentFontSizePreset = currentFontSizePreset.next() }) {
-                        Image(systemName: "textformat.size")
-                            .font(.title2)
-                            .foregroundColor(.white.opacity(0.8))
-                    }
+            HStack {
+                Button(action: onDismissTapped) { 
+                    Image(systemName: "chevron.backward")
+                        .font(.title2)
+                        .foregroundColor(.white.opacity(0.8))
                 }
+                Spacer() 
+                Button(action: { currentFontSizePreset = currentFontSizePreset.next() }) {
+                    Image(systemName: "textformat.size")
+                        .font(.title2)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+            }
             .padding(.horizontal, 20)
             .padding(.top, (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first(where: { $0.isKeyWindow })?.safeAreaInsets.top ?? 15)
             .padding(.bottom, 8) 
@@ -82,7 +71,7 @@ struct PlayingView: View {
                         .frame(maxHeight: .infinity)
                 } else {
                     ScrollViewReader { scrollViewProxy in
-                            ScrollView(.vertical, showsIndicators: false) {
+                        ScrollView(.vertical, showsIndicators: false) {
                             LazyVStack(alignment: .leading, spacing: 8) {
                                 ForEach(repository.transcriptions.indices, id: \.self) { index in
                                     let transcription = repository.transcriptions[index]
@@ -114,7 +103,6 @@ struct PlayingView: View {
                             .padding(.top, 10)
                             .padding(.bottom, fadeOutHeight + 5)
                         }
-
                         .mask(
                             VStack(spacing: 0) {
                                 Rectangle().fill(Color.black)
@@ -147,10 +135,44 @@ struct PlayingView: View {
         }
         .frame(maxWidth: .infinity) 
         .foregroundColor(.white)
+        .offset(y: dragOffset)
+        .background(Color.clear) // Ensure transparent background to show the BlurredBackgroundView behind
+        .gesture(
+            DragGesture(coordinateSpace: .global)
+                .onChanged { value in
+                    // Only allow downward dragging
+                    if value.translation.height > 0 {
+                        dragOffset = value.translation.height
+                    }
+                }
+                .onEnded { value in
+                    if value.translation.height > dismissThreshold {
+                        withAnimation(.spring()) {
+                            onDismissTapped()
+                        }
+                    } else {
+                        withAnimation(.spring()) {
+                            dragOffset = 0
+                        }
+                    }
+                }
+        )
+        .onAppear {
+            if repository.transcriptions.isEmpty || repository.currentContentIdForTranscriptions != content.id {
+                Task {
+                    isLoadingTranscription = true
+                    await repository.fetchTranscriptions(for: content.id, from: content.transcriptionUrl)
+                    isLoadingTranscription = false
+                    repository.currentContentIdForTranscriptions = content.id
+                }
+            }
+        }
+        .onChange(of: audioPlayer.currentTime) { _, _ in
+            audioPlayer.updateCurrentTranscription(transcriptions: repository.transcriptions)
+        }
     }
 }
 
-// MARK: - Detailed Audio Controls
 struct DetailedAudioControls: View {
     let content: Content 
     @State private var controlsOffsetX: CGFloat = 0 
@@ -265,4 +287,4 @@ struct DetailedAudioControls: View {
         let seconds = Int(time) % 60
         return String(format: "%d:%02d", minutes, seconds)
     }
-} 
+}

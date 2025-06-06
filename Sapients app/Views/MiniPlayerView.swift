@@ -7,26 +7,12 @@ struct MiniPlayerView: View {
     @EnvironmentObject private var repository: ContentRepository // For image URL
 
     @State private var yOffset: CGFloat = 0
+    @State private var keyboardVisible: Bool = false
     private let dismissThreshold: CGFloat = 50 // How far user needs to drag to dismiss
 
     var body: some View {
-        if miniState.isVisible && audioPlayer.currentContent != nil {
+        if miniState.isVisible && audioPlayer.currentContent != nil && !keyboardVisible {
             VStack(spacing: 0) {
-                // Progress Bar
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(height: 3)
-                        Capsule()
-                            .fill(Color.accentColor)
-                            .frame(width: (audioPlayer.duration > 0 ? CGFloat(audioPlayer.currentTime / audioPlayer.duration) * geo.size.width : 0), height: 3)
-                            .animation(.linear(duration: 0.1), value: audioPlayer.currentTime)
-                    }
-                }
-                .frame(height: 3)
-                .padding(.bottom, 8) // Space between progress bar and content
-
                 HStack(spacing: 10) {
                     // Artwork
                     if let content = audioPlayer.currentContent,
@@ -78,15 +64,24 @@ struct MiniPlayerView: View {
                     }
                 }
                 .padding(.horizontal)
-                .padding(.bottom, 8) // Bottom padding for the HStack content
+                .padding(.vertical, 12)
             }
-            .padding(.top, 8) // Top padding for the VStack to make space for progress bar
             .background(.thinMaterial) // Or .regularMaterial, .ultraThinMaterial
             .cornerRadius(12)
             .shadow(color: Color.black.opacity(0.15), radius: 5, x: 0, y: 2)
             .padding(.horizontal)
             .padding(.bottom, (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first(where: { $0.isKeyWindow })?.safeAreaInsets.bottom ?? 0 > 0 ? 50 : 8) // Adjust bottom padding based on safe area (e.g., for TabView)
             .offset(y: yOffset)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                withAnimation(.easeOut(duration: 0.3)) {
+                    keyboardVisible = true
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                withAnimation(.easeOut(duration: 0.3)) {
+                    keyboardVisible = false
+                }
+            }
             .gesture(
                 DragGesture()
                     .onChanged { value in
@@ -110,8 +105,7 @@ struct MiniPlayerView: View {
             )
             .onTapGesture {
                 withAnimation {
-                    miniState.isVisible = false // Hide mini-player
-                    miniState.isPresentingFullPlayer = true // Signal to show full player
+                    miniState.isPresentingFullPlayer = true
                 }
                 print("MiniPlayer tapped - setting isPresentingFullPlayer to true.")
             }
@@ -136,7 +130,6 @@ struct MiniPlayerView_Previews: PreviewProvider {
             description: "Preview Description",
             audioUrl: "example.mp3",
             imageUrl: nil, // Test with no image
-            // imageUrl: "https://example.com/image.jpg", // Test with an image URL (won't load in preview unless real)
             createdAt: Date(),
             publishOn: Date(),
             transcriptionUrl: "example.csv"

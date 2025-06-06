@@ -15,9 +15,9 @@ class AudioPlayerService: ObservableObject {
     @Published var duration: TimeInterval = 0
     @Published var currentTranscriptionIndex: Int = 0
     @Published var currentPlaybackRate: Float = 1.0
-    @Published var hasLoadedTrack: Bool = false // NEW: exposes whether *anything* is currently loaded
-    @Published var currentContent: Content? = nil // NEW: holds the currently loaded content item
-    private(set) var currentLoadedURL: URL? // Added to track current URL
+    @Published var hasLoadedTrack: Bool = false
+    @Published var currentContent: Content? = nil
+    private(set) var currentLoadedURL: URL?
     
     private var cancellables = Set<AnyCancellable>()
     
@@ -27,7 +27,7 @@ class AudioPlayerService: ObservableObject {
     
     // MARK: - Audio Session Setup
     private func setupAudioSession() {
-        #if os(iOS) // AVAudioSession is only available on iOS, tvOS, watchOS
+        #if os(iOS)
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
             try AVAudioSession.sharedInstance().setActive(true)
@@ -41,27 +41,24 @@ class AudioPlayerService: ObservableObject {
     func loadAudio(from url: URL, for content: Content) {
         if let timeObserver = timeObserver, let player = player {
             player.removeTimeObserver(timeObserver)
-            self.timeObserver = nil // Clear the old observer
+            self.timeObserver = nil
         }
-        cancellables.forEach { $0.cancel() } // Cancel previous subscriptions
+        cancellables.forEach { $0.cancel() }
         cancellables.removeAll()
 
         // Reset state for new audio
-        DispatchQueue.main.async {
-            self.isPlaying = false
-            self.currentTime = 0
-            self.duration = 0
-            self.currentTranscriptionIndex = 0
-            self.currentLoadedURL = nil
-            self.currentContent = nil // Reset current content
-            self.hasLoadedTrack = false // Reset loaded track flag
-        }
+        self.isPlaying = false
+        self.currentTime = 0
+        self.duration = 0
+        self.currentTranscriptionIndex = 0
+        self.currentLoadedURL = nil
+        self.currentContent = nil
         
         playerItem = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: playerItem)
-        self.currentLoadedURL = url // Store the new URL
-        self.currentContent = content // Store the content item
-        self.hasLoadedTrack = true   // Set that a track is loaded
+        self.currentLoadedURL = url
+        self.currentContent = content
+        self.hasLoadedTrack = true // Set this to true when audio is loaded
         
         // Get duration asynchronously
         if let currentItem = playerItem {
@@ -79,9 +76,7 @@ class AudioPlayerService: ObservableObject {
                 }
             }
         } else {
-             DispatchQueue.main.async {
-                self.duration = 0
-            }
+            self.duration = 0
         }
         
         timeObserver = player?.addPeriodicTimeObserver(
@@ -98,9 +93,8 @@ class AudioPlayerService: ObservableObject {
             .sink { [weak self] _ in
                 guard let self = self else { return }
                 self.isPlaying = false
-                self.currentTime = 0 // Or self.duration if you want it to stay at the end
+                self.currentTime = 0
                 self.player?.seek(to: CMTime.zero)
-                // self.currentTranscriptionIndex = 0 // Optionally reset transcription index
             }
             .store(in: &cancellables)
     }
@@ -126,23 +120,17 @@ class AudioPlayerService: ObservableObject {
     
     func setPlaybackRate(to rate: Float) {
         guard let player = player else { return }
-        // Ensure the rate is valid (AVPlayer might have limits, e.g., 0.5 to 2.0 for some content)
-        // For now, we'll assume the provided rates are acceptable.
         player.rate = rate
         self.currentPlaybackRate = rate
-        // If the rate is > 0 and the player was paused, it will start playing.
-        // If the rate is 0, it will pause.
-        // Update isPlaying accordingly if the rate change affects play state.
         if rate == 0.0 {
-            if self.isPlaying { // If it was playing and rate becomes 0, it's now paused.
+            if self.isPlaying {
                 self.isPlaying = false
             }
         } else {
-            if !self.isPlaying { // If it was paused and rate becomes > 0, it's now playing.
-                 // Check if player's current item is at end. If so, seek to beginning before playing.
+            if !self.isPlaying {
                 if let currentItem = player.currentItem, currentItem.currentTime() >= currentItem.duration {
                     player.seek(to: .zero)
-                    self.currentTime = 0 // Reflect seek in our published property
+                    self.currentTime = 0
                 }
                 self.isPlaying = true
             }
@@ -158,23 +146,18 @@ class AudioPlayerService: ObservableObject {
         player = nil
         playerItem = nil
         if let timeObserver = self.timeObserver {
-            // Access player through self to ensure it's the class member, not a new local var
-            // However, player is already nil here. This check might need to be earlier or handled differently.
-            // For now, let's assume if player is nil, observer is also implicitly invalid or removed.
         }
         timeObserver = nil
         cancellables.forEach { $0.cancel() }
         cancellables.removeAll()
 
-        DispatchQueue.main.async {
-            self.isPlaying = false
-            self.currentTime = 0
-            self.duration = 0
-            self.currentTranscriptionIndex = 0
-            self.currentLoadedURL = nil
-            self.currentContent = nil
-            self.hasLoadedTrack = false // This will make MiniPlayerState.isVisible false
-        }
+        self.isPlaying = false
+        self.currentTime = 0
+        self.duration = 0
+        self.currentTranscriptionIndex = 0
+        self.currentLoadedURL = nil
+        self.currentContent = nil
+        self.hasLoadedTrack = false // Set this to false when stopping
     }
 
     // MARK: - Transcription Sync
@@ -182,10 +165,10 @@ class AudioPlayerService: ObservableObject {
         for (index, transcription) in transcriptions.enumerated() {
             if currentTime >= TimeInterval(transcription.startTime) && 
                currentTime <= TimeInterval(transcription.endTime) {
-                if currentTranscriptionIndex != index { // Update only if changed
+                if currentTranscriptionIndex != index {
                     currentTranscriptionIndex = index
                 }
-                break // Found the current one
+                break
             }
         }
     }
@@ -197,4 +180,4 @@ class AudioPlayerService: ObservableObject {
         }
         cancellables.forEach { $0.cancel() }
     }
-} 
+}

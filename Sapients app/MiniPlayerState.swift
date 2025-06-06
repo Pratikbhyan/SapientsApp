@@ -6,11 +6,15 @@ import Combine
 final class MiniPlayerState: ObservableObject {
     @Published var isVisible: Bool = false
     @Published var isPresentingFullPlayer: Bool = false
+    @Published var keyboardHeight: CGFloat = 0
     
-    private var cancellable: AnyCancellable?
+    private var cancellables = Set<AnyCancellable>()
     
     init(player: AudioPlayerService) {
-        cancellable = player.$hasLoadedTrack
+        // Listen to hasLoadedTrack changes
+        player.$hasLoadedTrack
+            .receive(on: DispatchQueue.main)
             .assign(to: \.isVisible, on: self)
+            .store(in: &cancellables)
     }
 }
