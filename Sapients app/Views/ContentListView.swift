@@ -207,9 +207,6 @@ struct ContentRowView: View {
                     .foregroundColor(.secondary)
             }
             Spacer()
-            Image(systemName: "play.circle")
-                .font(.title2)
-                .foregroundColor(.accentColor)
         }
         .padding(.vertical, 4)
     }

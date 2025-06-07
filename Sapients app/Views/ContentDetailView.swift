@@ -21,7 +21,7 @@ struct ContentDetailView: View {
     private var currentDate: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM d"
-        return formatter.string(from: Date())
+        return formatter.string(from: content.effectiveSortDate)
     }
     
     var body: some View {
