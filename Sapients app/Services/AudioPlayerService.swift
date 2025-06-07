@@ -20,6 +20,8 @@ class AudioPlayerService: ObservableObject {
     @Published var currentContent: Content? = nil
     private(set) var currentLoadedURL: URL?
     
+    private var currentArtwork: MPMediaItemArtwork?
+    
     private var cancellables = Set<AnyCancellable>()
     
     private init() {
@@ -27,7 +29,6 @@ class AudioPlayerService: ObservableObject {
         setupRemoteTransportControls()
     }
     
-    // MARK: - Audio Session Setup
     private func setupAudioSession() {
         #if os(iOS)
         do {
@@ -66,42 +67,58 @@ class AudioPlayerService: ObservableObject {
             return .success
         }
         
-        // Optional: Add skip forward/backward commands if needed
-        // commandCenter.skipForwardCommand.preferredIntervals = [NSNumber(value: 15)] // Example: 15 seconds
-        // commandCenter.skipForwardCommand.addTarget { /* ... */ }
-        // commandCenter.skipBackwardCommand.preferredIntervals = [NSNumber(value: 15)]
-        // commandCenter.skipBackwardCommand.addTarget { /* ... */ }
+        commandCenter.skipForwardCommand.preferredIntervals = [NSNumber(value: 15)] 
+        commandCenter.skipForwardCommand.addTarget { [weak self] event in
+            guard let self = self else { return .commandFailed }
+            self.seek(to: self.currentTime + 15)
+            return .success
+        }
+        
+        commandCenter.skipBackwardCommand.preferredIntervals = [NSNumber(value: 15)]
+        commandCenter.skipBackwardCommand.addTarget { [weak self] event in
+            guard let self = self else { return .commandFailed }
+            self.seek(to: self.currentTime - 15)
+            return .success
+        }
+    }
+
+    private func loadArtworkOnce() {
+        currentArtwork = nil
+        
+        if let imageUrlString = currentContent?.imageUrl,
+           let imageURL = ContentRepository().getPublicURL(for: imageUrlString, bucket: "images") {
+            ImageService.shared.loadImage(from: imageURL) { [weak self] uiImage in
+                DispatchQueue.main.async {
+                    if let image = uiImage {
+                        let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                        self?.currentArtwork = artwork
+                        self?.updateNowPlayingInfoWithCurrentArtwork()
+                    }
+                }
+            }
+        }
     }
 
     private func updateNowPlayingInfo() {
+        updateNowPlayingInfoWithCurrentArtwork()
+    }
+    
+    private func updateNowPlayingInfoWithCurrentArtwork() {
         var nowPlayingInfo = [String: Any]()
         nowPlayingInfo[MPMediaItemPropertyTitle] = currentContent?.title ?? "Sapients Audio"
         nowPlayingInfo[MPMediaItemPropertyArtist] = "Sapients" 
         
-        if let imageURLString = currentContent?.imageUrl, let imageURL = URL(string: imageURLString) {
-            // Asynchronously load image and update artwork. This part might need a proper image caching/loading mechanism.
-            // For simplicity, this is a basic URLSession task. Consider using your ImageService or Kingfisher if applicable.
-            URLSession.shared.dataTask(with: imageURL) { data, _, _ in
-                if let data = data, let image = UIImage(data: data) {
-                    DispatchQueue.main.async { // Ensure UI updates on main thread
-                        let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                        MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPMediaItemPropertyArtwork] = artwork
-                    }
-                }
-            }.resume()
-        } else {
-            // You could set a placeholder artwork if no specific image is available
-            // For example, using an app icon image.
+        if let artwork = currentArtwork {
+            nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
         }
 
         nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
-        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = player?.rate ?? currentPlaybackRate // Use player's actual rate if available
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = player?.rate ?? currentPlaybackRate
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
     
-    // MARK: - Audio Loading
     func loadAudio(from url: URL, for content: Content) {
         if let timeObserver = timeObserver, let player = player {
             player.removeTimeObserver(timeObserver)
@@ -110,13 +127,13 @@ class AudioPlayerService: ObservableObject {
         cancellables.forEach { $0.cancel() }
         cancellables.removeAll()
 
-        // Reset state for new audio
         self.isPlaying = false
         self.currentTime = 0
         self.duration = 0
         self.currentTranscriptionIndex = 0
         self.currentLoadedURL = nil
         self.currentContent = nil
+        self.currentArtwork = nil
         
         playerItem = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: playerItem)
@@ -124,25 +141,27 @@ class AudioPlayerService: ObservableObject {
         self.currentContent = content
         self.hasLoadedTrack = true
         
+        loadArtworkOnce()
+        
         if let currentItem = playerItem {
             Task {
                 do {
                     let loadedDuration = try await currentItem.asset.load(.duration)
                     DispatchQueue.main.async {
                         self.duration = CMTimeGetSeconds(loadedDuration)
-                        self.updateNowPlayingInfo() // Update after duration is known
+                        self.updateNowPlayingInfo()
                     }
                 } catch {
                     print("Failed to load duration: \(error)")
                     DispatchQueue.main.async {
                         self.duration = 0
-                        self.updateNowPlayingInfo() // Update even if duration fails
+                        self.updateNowPlayingInfo()
                     }
                 }
             }
         } else {
             self.duration = 0
-            self.updateNowPlayingInfo() // Update if no item
+            self.updateNowPlayingInfo()
         }
         
         timeObserver = player?.addPeriodicTimeObserver(
@@ -152,8 +171,7 @@ class AudioPlayerService: ObservableObject {
             guard let strongSelf = self else { return }
             Task { @MainActor in
                 strongSelf.currentTime = CMTimeGetSeconds(time)
-                // Update now playing info periodically for progress
-                if strongSelf.isPlaying { // Only update if playing to avoid unnecessary updates
+                if strongSelf.isPlaying {
                    strongSelf.updateNowPlayingInfo()
                 }
             }
@@ -165,41 +183,29 @@ class AudioPlayerService: ObservableObject {
                 self.isPlaying = false
                 self.currentTime = 0
                 self.player?.seek(to: CMTime.zero)
-                self.updateNowPlayingInfo() // Update on end
+                self.updateNowPlayingInfo()
             }
             .store(in: &cancellables)
             
-        // Initial update of Now Playing Info when track is loaded
         updateNowPlayingInfo()
     }
     
-    // MARK: - Playback Controls
     func play() {
-        do { 
+        do {
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("Failed to activate audio session for play: \(error)")
         }
         player?.play()
-        player?.rate = self.currentPlaybackRate 
+        player?.rate = self.currentPlaybackRate
         isPlaying = true
-        updateNowPlayingInfo() 
+        updateNowPlayingInfo()
     }
     
     func pause() {
         player?.pause()
         isPlaying = false
-        updateNowPlayingInfo() 
-        // Optional: Deactivate audio session after a delay if desired for power saving, but often not needed.
-        // DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-        //     if !self.isPlaying {
-        //         do {
-        //             try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        //         } catch {
-        //             print("Failed to deactivate audio session: \(error)")
-        //         }
-        //     }
-        // }
+        updateNowPlayingInfo()
     }
     
     func togglePlayPause() {
@@ -208,7 +214,6 @@ class AudioPlayerService: ObservableObject {
         } else {
             play()
         }
-        // updateNowPlayingInfo() is called by play() and pause()
     }
     
     func setPlaybackRate(to rate: Float) {
@@ -228,12 +233,12 @@ class AudioPlayerService: ObservableObject {
                 self.isPlaying = true
             }
         }
-        self.updateNowPlayingInfo() 
+        self.updateNowPlayingInfo()
     }
 
     func seek(to time: TimeInterval) {
         player?.seek(to: CMTime(seconds: time, preferredTimescale: 600))
-        self.currentTime = time 
+        self.currentTime = time
         updateNowPlayingInfo()
     }
     
@@ -253,22 +258,12 @@ class AudioPlayerService: ObservableObject {
         self.currentTranscriptionIndex = 0
         self.currentLoadedURL = nil
         self.currentContent = nil
-        self.hasLoadedTrack = false 
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
-        self.currentContent = nil 
         self.hasLoadedTrack = false
+        self.currentArtwork = nil
         
-        // Deactivate audio session
-        // #if os(iOS) 
-        // do {
-        //     try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        // } catch {
-        //     print("Failed to deactivate audio session on stop: \(error)")
-        // }
-        // #endif
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
-    // MARK: - Transcription Sync
     func updateCurrentTranscription(transcriptions: [Transcription]) {
         for (index, transcription) in transcriptions.enumerated() {
             if currentTime >= TimeInterval(transcription.startTime) && 
@@ -281,7 +276,6 @@ class AudioPlayerService: ObservableObject {
         }
     }
     
-    // MARK: - Cleanup
     deinit {
         if let timeObserver = timeObserver, let player = player {
             player.removeTimeObserver(timeObserver)
