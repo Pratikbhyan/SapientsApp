@@ -1,12 +1,13 @@
 import SwiftUI
+import StoreKit
 
 struct SubscriptionView: View {
     @Environment(\.dismiss) var dismiss
-    private let imageUrl = URL(string: "https://lh3.googleusercontent.com/aida-public/AB6AXuD_Q9AxAcKCUO5VUbkNYJLiOM7ZHmuCFjg9ZpBxMQLSE-nOgq6AtNWiKZlLMdt1vY4P4JHtLduSrwREWQG8AO8oR4_dAE5ND3_IHx5SVFYZIAu6nt-SLQIKfeL1dJKykKqH2BJ6o1suGkvC9FS76hSOrlusdBb-GAAJ7WhuKzwbAIU0H4KNqDhyXHEMvUpVxbteMCCUkdWFlbRs3uBF-wovB3x8WADhUDRo_KRGTZQt9UOaPrBoRsxEfE1eaoB7tB4QOZ78I9Te9X8")
+    @StateObject private var storeKit = StoreKitService.shared
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
+            // Header with close button
             HStack {
                 Button {
                     dismiss()
@@ -14,139 +15,181 @@ struct SubscriptionView: View {
                     Image(systemName: "xmark")
                         .font(.title2)
                         .foregroundColor(.primary)
-                        .frame(width: 44, height: 44) // Ensure tappable area
+                        .frame(width: 44, height: 44)
                 }
                 Spacer()
-                Text("Upgrade")
-                    .font(.headline)
-                    .fontWeight(.bold)
-                Spacer()
-                // Invisible placeholder to balance the X button for centering title
-                Rectangle().fill(Color.clear).frame(width: 44, height: 44)
             }
             .padding(.horizontal)
-            .padding(.top, 10) // Adjust top padding as needed for sheet presentation
+            .padding(.top, 10)
             .padding(.bottom, 10)
-            .background(.regularMaterial)
-            .overlay(Divider(), alignment: .bottom)
-
-            ScrollView {
-                VStack(alignment: .center, spacing: 20) {
-                    Text("Unlock premium features and exclusive content.")
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                        .padding(.top)
-
-                    // Unlock Premium Card
-                    VStack(spacing: 0) {
-                        CachedAsyncImage(url: imageUrl) {
-                            ProgressView()
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                .aspectRatio(1.6, contentMode: .fill)
-                                .background(Color.gray.opacity(0.1))
-                        }
-                        .aspectRatio(1.6, contentMode: .fill) // Apply to CachedAsyncImage directly
-                        .frame(height: 200) // Adjust height as needed, or use aspectRatio to define height based on width
-                        .clipped()
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Unlock Premium")
+            
+            // Main content
+            VStack(spacing: 20) {
+                // Image that fits properly without overflow
+                Image("unlock")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 300)
+                    .cornerRadius(12)
+                    .padding(.horizontal)
+                
+                Spacer()
+                
+                // Bottom subscription area
+                VStack(spacing: 20) {
+                    // Monthly subscription card
+                    if let monthlyProduct = storeKit.monthlyProduct {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Monthly")
                                 .font(.title2)
                                 .fontWeight(.bold)
-                            Text("Access all premium features and content.")
-                                .font(.body)
-                                .foregroundColor(.gray)
+                                .foregroundColor(.primary)
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(monthlyProduct.displayPrice)
+                                    .font(.system(size: 40, weight: .black))
+                                    .foregroundColor(.primary)
+                                Text("/month")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                            }
                         }
                         .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(16)
-                    .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
-                    .padding(.horizontal)
-                    
-                    // Monthly Plan Selection Box
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Monthly")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        HStack(alignment: .firstTextBaseline) {
-                            Text("$3.99")
-                                .font(.system(size: 40, weight: .black))
-                            Text("/month")
-                                .font(.headline)
-                                .foregroundColor(.gray)
-                        }
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(Color(hex: "#87CEEB")) // Sky Blue
-                            Text("Billed monthly")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                        }
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(16)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color(hex: "#87CEEB"), lineWidth: 2) // Sky Blue border
-                    )
-                    .padding(.horizontal)
-
-                    // Premium Features List
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Premium Features:")
-                            .font(.headline)
-                            .fontWeight(.bold)
-
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color(red: 0.53, green: 0.81, blue: 0.92), lineWidth: 2)
+                        )
+                    } else if storeKit.isLoading {
+                        // Loading state
                         VStack(alignment: .leading, spacing: 8) {
-                            FeatureRow(text: "Unlimited access to all content")
-                            FeatureRow(text: "Download content for offline access")
+                            Text("Monthly")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
+                            HStack(alignment: .firstTextBaseline) {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle())
+                                    .scaleEffect(0.8)
+                                Text("/month")
+                                    .font(.headline)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                    } else {
+                        // Error/fallback state
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Monthly Subscription")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
+                            Text("Pricing unavailable")
+                                .font(.headline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.orange.opacity(0.6), lineWidth: 1)
+                        )
+                    }
+
+                    // Subscribe button
+                    if storeKit.hasActiveSubscription {
+                        Button(action: {
+                            dismiss()
+                        }) {
+                            Text("Continue")
+                                .font(.headline)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color(red: 0.53, green: 0.81, blue: 0.92))
+                                .cornerRadius(25)
+                        }
+                    } else {
+                        VStack(spacing: 12) {
+                            Button(action: {
+                                Task {
+                                    await handlePurchase()
+                                }
+                            }) {
+                                HStack {
+                                    if storeKit.isLoading {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
+                                    } else {
+                                        Text("Subscribe")
+                                            .font(.headline)
+                                            .fontWeight(.bold)
+                                    }
+                                }
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color(red: 0.53, green: 0.81, blue: 0.92))
+                                .cornerRadius(25)
+                            }
+                            .disabled(storeKit.isLoading || storeKit.monthlyProduct == nil)
+                            
+                            Button("Restore Purchases") {
+                                Task {
+                                    await storeKit.restorePurchases()
+                                }
+                            }
+                            .font(.caption)
+                            .foregroundColor(Color(red: 0.53, green: 0.81, blue: 0.92))
+                            .disabled(storeKit.isLoading)
                         }
                     }
-                    .padding(.horizontal)
-                    .padding(.top, 20)
 
-                    Text("Your subscription will auto-renew monthly until you cancel.")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                        .padding(.top, 30) // Increased top padding for separation
-
-                    Spacer()
+                    // Error message
+                    if let errorMessage = storeKit.errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                    }
                 }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 40)
             }
-
-            // Fixed Footer Button
-            VStack(spacing:0) {
-                Divider()
-                Button(action: {
-                    // TODO: Handle subscription action
-                    print("Subscribe tapped in modal")
-                }) {
-                    Text("Subscribe")
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color(hex: "#87CEEB")) // Sky Blue
-                        .cornerRadius(25) // Pill shape
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 10) // Add some vertical padding for the button itself
+        }
+        .task {
+            await storeKit.loadProducts()
+        }
+    }
+    
+    private func handlePurchase() async {
+        guard let product = storeKit.monthlyProduct else {
+            return
+        }
+        
+        do {
+            let transaction = try await storeKit.purchase(product)
+            if transaction != nil {
+                dismiss()
             }
-            .background(.thinMaterial) // To give a slight blur effect for the footer
+        } catch {
+            print("Purchase failed: \(error)")
         }
     }
 }
 
-// Helper to use hex colors
 extension Color {
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
@@ -164,20 +207,6 @@ extension Color {
             (a, r, g, b) = (255, 0, 0, 0)
         }
         self.init(.sRGB, red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255, opacity: Double(a) / 255)
-    }
-}
-
-struct FeatureRow: View {
-    let text: String
-
-    var body: some View {
-        HStack {
-            Image(systemName: "checkmark") // Using a standard checkmark, as list-disc is HTML specific
-                .foregroundColor(Color(hex: "#87CEEB")) // Sky Blue
-            Text(text)
-                .font(.subheadline)
-                .foregroundColor(.gray)
-        }
     }
 }
 

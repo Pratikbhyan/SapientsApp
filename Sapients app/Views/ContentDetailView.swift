@@ -5,60 +5,54 @@ import UIKit
 struct ContentDetailView: View {
     let content: Content
 
-    @ObservedObject var repository: ContentRepository // Passed in
+    @ObservedObject var repository: ContentRepository
     @EnvironmentObject private var audioPlayer: AudioPlayerService
     @EnvironmentObject private var miniState: MiniPlayerState
+    @StateObject private var subscriptionService = SubscriptionService.shared
 
     init(content: Content, repository: ContentRepository) {
         self.content = content
-        self.repository = repository // Assign passed-in repository
+        self.repository = repository
         print("[DIAG] ContentDetailView init: Title - \(content.title)")
     }
     
     @State private var showPlayer = false
     @State private var isLoadingTranscription: Bool = false
-
+    @State private var showSubscriptionSheet = false
+    
     private var currentDate: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM d"
         return formatter.string(from: content.effectiveSortDate)
     }
     
+    private var isContentFree: Bool {
+        return subscriptionService.isContentFree(content, in: repository.contents)
+    }
+    
     var body: some View {
         ZStack {
-            // Main content area for InitialView
             VStack(alignment: .leading, spacing: 0) { 
-                // InitialView is now always the direct content of ContentDetailView's VStack
-                    InitialView(
-                        content: content,
-                        currentDate: currentDate,
-                        repository: repository,
-                        audioPlayer: audioPlayer,
-                        showPlayer: $showPlayer,
-                        onPlayTapped: {
+                InitialView(
+                    content: content,
+                    currentDate: currentDate,
+                    repository: repository,
+                    audioPlayer: audioPlayer,
+                    showPlayer: $showPlayer,
+                    onPlayTapped: {
+                        // Check subscription before playing
+                        if isContentFree {
                             Task {
-                                guard let newAudioURL = repository.getPublicURL(for: content.audioUrl, bucket: "audio") else {
-                                    print("ContentDetailView: Could not get audio URL for \(content.title)")
-                                    return
-                                }
-
-                                // Load audio first to set currentContent
-                                audioPlayer.loadAudio(from: newAudioURL, for: content)
-                                audioPlayer.play()
-
-                                showPlayer = true
-
-                                // Fetch transcriptions
-                                print("ContentDetailView: Fetching transcriptions for \(content.title)")
-                                self.isLoadingTranscription = true
-                                await repository.fetchTranscriptions(for: content.id, from: content.transcriptionUrl)
-                                self.isLoadingTranscription = false
+                                await playContent()
                             }
+                        } else {
+                            showSubscriptionSheet = true
                         }
-                    )
+                    }
+                )
             }
-            .frame(maxWidth: .infinity) // Ensure this VStack takes full width
-            .background(Color(UIColor.systemBackground)) // Standard background for ContentDetailView
+            .frame(maxWidth: .infinity)
+            .background(Color(UIColor.systemBackground))
         }
         .sheet(isPresented: $showPlayer) {
             ZStack {
@@ -77,10 +71,10 @@ struct ContentDetailView: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
         }
-        // Tab Bar Hiding Logic REMOVED from ContentDetailView
+        .sheet(isPresented: $showSubscriptionSheet) {
+            SubscriptionView()
+        }
         .onAppear {
-            // UIKit TabBar hiding logic REMOVED
-            // Hide mini player when detail view appears
             miniState.isVisible = false
             
             Task {
@@ -100,12 +94,27 @@ struct ContentDetailView: View {
             
             print("[DIAG] ContentDetailView ON_DISAPPEAR: Title - \(content.title), miniState.isVisible: \(miniState.isVisible), miniState.isPresentingFullPlayer: \(miniState.isPresentingFullPlayer)")
         }
-        .edgesIgnoringSafeArea(.all) // InitialView in ContentDetailView might want to manage its own safe areas
-        // .preferredColorScheme(isPlayingViewActive ? .dark : nil) // Color scheme is now static or handled by InitialView / PlayingView
+        .edgesIgnoringSafeArea(.all)
+    }
+    
+    private func playContent() async {
+        guard let newAudioURL = repository.getPublicURL(for: content.audioUrl, bucket: "audio") else {
+            print("ContentDetailView: Could not get audio URL for \(content.title)")
+            return
+        }
+
+        audioPlayer.loadAudio(from: newAudioURL, for: content)
+        audioPlayer.play()
+
+        showPlayer = true
+
+        print("ContentDetailView: Fetching transcriptions for \(content.title)")
+        self.isLoadingTranscription = true
+        await repository.fetchTranscriptions(for: content.id, from: content.transcriptionUrl)
+        self.isLoadingTranscription = false
     }
 }
 
-// MARK: - Blurred Background
 struct BlurredBackgroundView: View {
     @State private var randomBaseColor: Color = Color.clear
 
@@ -151,7 +160,6 @@ extension Color {
     }
 }
 
-// MARK: - Initial View (Home Screen Card)
 struct InitialView: View {
     let content: Content
     let currentDate: String
@@ -247,7 +255,7 @@ struct InitialView: View {
                                         showPlayer = true
                                         audioPlayer.play()
                                     } else {
-                                        // Different content - start playing this content
+                                        // Different content - trigger onPlayTapped (which does subscription check)
                                         onPlayTapped()
                                     }
                                 }) {
@@ -282,10 +290,8 @@ struct InitialView: View {
                         }
                         .padding(.bottom, bottomSafeArea + (screenHeight * playButtonBottomPercentage))
                         .frame(maxWidth: .infinity, alignment: .center)
-
                     }
                     .padding(.horizontal, 20)
-
                 }
             }
         }

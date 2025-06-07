@@ -6,6 +6,7 @@ struct ContentListView: View {
     @State private var presentingContentDetail: Content? = nil
     @StateObject private var audioPlayer = AudioPlayerService.shared // Ensure access to the player
     @EnvironmentObject var miniPlayerState: MiniPlayerState // Access to mini-player state
+    @StateObject private var subscriptionService = SubscriptionService.shared
 
     init() {
         print("[DIAG] ContentListView INIT")
@@ -171,29 +172,37 @@ struct ContentRowView: View {
             if let imageUrlString = content.imageUrl,
                let imageURL = repository.getPublicURL(for: imageUrlString, bucket: "images") {
                     let _ = print("[ContentRowView] Generated Public URL for \(imageUrlString): \(imageURL)") // DIAGNOSTIC
-                CachedAsyncImage(url: imageURL) {
-                    // This is the placeholder view from CachedAsyncImage
-                    DefaultPlaceholder()
-                        .frame(width: 60, height: 60) // Apply frame to placeholder as well
-                }
-                .aspectRatio(contentMode: .fill) // Apply to the image if loaded
-                .frame(width: 60, height: 60)
-                .cornerRadius(8)
-                .clipped()
-            } else {
-                Image(systemName: "music.note")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 30, height: 30)
-                    .padding(15)
-                    .background(Color.gray.opacity(0.2))
+                ZStack {
+                    CachedAsyncImage(url: imageURL) {
+                        // This is the placeholder view from CachedAsyncImage
+                        DefaultPlaceholder()
+                            .frame(width: 60, height: 60) // Apply frame to placeholder as well
+                    }
+                    .aspectRatio(contentMode: .fill) // Apply to the image if loaded
+                    .frame(width: 60, height: 60)
                     .cornerRadius(8)
+                    .clipped()
+                }
+            } else {
+                ZStack {
+                    Image(systemName: "music.note")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 30, height: 30)
+                        .padding(15)
+                        .background(Color.gray.opacity(0.2))
+                        .cornerRadius(8)
+                }
             }
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(content.title)
-                    .font(.headline)
-                    .lineLimit(2)
+                HStack {
+                    Text(content.title)
+                        .font(.headline)
+                        .lineLimit(2)
+                    
+                    Spacer()
+                }
                 
                 if let description = content.description {
                     Text(description)
