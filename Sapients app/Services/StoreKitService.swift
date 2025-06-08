@@ -43,22 +43,60 @@ class StoreKitService: NSObject, ObservableObject {
     
     // MARK: - Load Products
     func loadProducts() async {
+        print("=== LOADING PRODUCTS ===")
+        print("Product IDs to load: \(productIDs)")
+        
         isLoading = true
         errorMessage = nil
         
         do {
+            print("Calling Product.products(for:)...")
             let storeProducts = try await Product.products(for: productIDs)
-            self.products = storeProducts
-            print("Loaded \(storeProducts.count) products")
-            for product in storeProducts {
-                print("Product ID: \(product.id), Display Name: \(product.displayName), Price: \(product.displayPrice)")
+            
+            print("Raw response - product count: \(storeProducts.count)")
+            
+            if storeProducts.isEmpty {
+                print("⚠️ No products returned from App Store")
+                print("Possible causes:")
+                print("- Product not approved in App Store Connect")
+                print("- Not signed in with sandbox account")
+                print("- Testing on simulator instead of device")
+                print("- Network/firewall blocking App Store requests")
+                self.errorMessage = "No products available. Check sandbox account and network."
+            } else {
+                print("✅ Products loaded successfully:")
+                for product in storeProducts {
+                    print("- ID: \(product.id)")
+                    print("- Name: \(product.displayName)")
+                    print("- Price: \(product.displayPrice)")
+                    print("- Type: \(product.type)")
+                }
             }
+            
+            self.products = storeProducts
         } catch {
-            print("Failed to load products: \(error)")
-            self.errorMessage = "Failed to load subscription options"
+            print("❌ Failed to load products with error: \(error)")
+            print("Error type: \(type(of: error))")
+            
+            if let skError = error as? SKError {
+                print("StoreKit Error Code: \(skError.code.rawValue)")
+                print("StoreKit Error Description: \(skError.localizedDescription)")
+                
+                switch skError.code {
+                case .cloudServiceNetworkConnectionFailed:
+                    self.errorMessage = "Network connection failed. Check internet connection."
+                case .storeProductNotAvailable:
+                    self.errorMessage = "Products not available. Check App Store Connect setup."
+                default:
+                    self.errorMessage = "StoreKit error: \(skError.localizedDescription)"
+                }
+            } else {
+                self.errorMessage = "Failed to load products: \(error.localizedDescription)"
+            }
         }
         
         isLoading = false
+        print("=== PRODUCT LOADING COMPLETE ===")
     }
     
     // MARK: - Purchase Product
