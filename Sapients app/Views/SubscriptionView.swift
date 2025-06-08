@@ -39,81 +39,52 @@ struct SubscriptionView: View {
             
             // Bottom subscription area
             VStack(spacing: 20) {
-                // Debug info section
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Debug Info:")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                    Text("Products loaded: \(storeKit.products.count)")
-                        .font(.caption)
-                    Text("Is loading: \(storeKit.isLoading)")
-                        .font(.caption)
-                    Text("Has subscription: \(storeKit.hasActiveSubscription)")
-                        .font(.caption)
-                    if let error = storeKit.errorMessage {
-                        Text("Error: \(error)")
-                            .font(.caption)
-                            .foregroundColor(.red)
-                    }
-                    if let product = storeKit.monthlyProduct {
-                        Text("Product found: \(product.id)")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                        Text("Price: \(product.displayPrice)")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                    } else {
-                        Text("No product found")
-                            .font(.caption)
-                            .foregroundColor(.red)
-                    }
-                }
-                .padding()
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(8)
-                
-                // Monthly subscription card
+                // Monthly subscription card as button
                 if let monthlyProduct = storeKit.monthlyProduct {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Monthly")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.primary)
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(monthlyProduct.displayPrice)
-                                .font(.system(size: 40, weight: .black))
-                                .foregroundColor(.primary)
-                            Text("/month")
-                                .font(.headline)
-                                .foregroundColor(.secondary)
+                    Button(action: {
+                        Task {
+                            await handlePurchase()
                         }
+                    }) {
+                        VStack(alignment: .center, spacing: 8) {
+                            Text("Monthly")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
+                            
+                            if storeKit.isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle())
+                                    .scaleEffect(0.8)
+                                    .padding(.top, 8)
+                            }
+                        }
+                        .padding(24)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color(red: 0.53, green: 0.81, blue: 0.92), lineWidth: 2)
+                        )
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(16)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color(red: 0.53, green: 0.81, blue: 0.92), lineWidth: 2)
-                    )
+                    .disabled(storeKit.isLoading)
+                    .buttonStyle(PlainButtonStyle())
+                    .scaleEffect(storeKit.isLoading ? 0.95 : 1.0)
+                    .animation(.easeInOut(duration: 0.1), value: storeKit.isLoading)
                 } else if storeKit.isLoading {
                     // Loading state
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Monthly")
+                    VStack(alignment: .center, spacing: 8) {
+                        Text("Subscribe ˙Monthly")
                             .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
-                        HStack(alignment: .firstTextBaseline) {
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle())
-                                .scaleEffect(0.8)
-                            Text("/month")
-                                .font(.headline)
-                                .foregroundColor(.secondary)
-                        }
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                            .scaleEffect(0.8)
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(24)
+                    .frame(maxWidth: .infinity)
                     .background(Color.gray.opacity(0.1))
                     .cornerRadius(16)
                     .overlay(
@@ -121,30 +92,34 @@ struct SubscriptionView: View {
                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                     )
                 } else {
-                    // Error/fallback state with debug info
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Monthly Subscription")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.primary)
-                        Text("Product ID: com.sapients")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text("Status: Product not loaded")
-                            .font(.caption)
-                            .foregroundColor(.red)
+                    // Error state - reload button
+                    Button(action: {
+                        Task {
+                            await storeKit.loadProducts()
+                        }
+                    }) {
+                        VStack(alignment: .center, spacing: 8) {
+                            Text("Monthly Subscription")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
+                            Text("Tap to reload")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(24)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(16)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.orange.opacity(0.6), lineWidth: 1)
+                        )
                     }
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(16)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.orange.opacity(0.6), lineWidth: 1)
-                    )
+                    .buttonStyle(PlainButtonStyle())
                 }
 
-                // Subscribe button
+                // Continue button for existing subscribers
                 if storeKit.hasActiveSubscription {
                     Button(action: {
                         dismiss()
@@ -159,73 +134,15 @@ struct SubscriptionView: View {
                             .cornerRadius(25)
                     }
                 } else {
-                    VStack(spacing: 12) {
-                        Button(action: {
-                            print("=== SUBSCRIBE BUTTON TAPPED ===")
-                            print("Products count: \(storeKit.products.count)")
-                            print("Monthly product: \(storeKit.monthlyProduct?.id ?? "nil")")
-                            print("Is loading: \(storeKit.isLoading)")
-                            print("Error message: \(storeKit.errorMessage ?? "none")")
-                            
-                            if let product = storeKit.monthlyProduct {
-                                print("Product details:")
-                                print("- ID: \(product.id)")
-                                print("- Type: \(product.type)")
-                                print("- Display name: \(product.displayName)")
-                                print("- Price: \(product.displayPrice)")
-                            }
-                            
-                            Task {
-                                await handlePurchase()
-                            }
-                        }) {
-                            HStack {
-                                if storeKit.isLoading {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                        .scaleEffect(0.8)
-                                } else {
-                                    Text(storeKit.monthlyProduct != nil ? "Subscribe" : "Reload Products")
-                                        .font(.headline)
-                                        .fontWeight(.bold)
-                                }
-                            }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color(red: 0.53, green: 0.81, blue: 0.92))
-                            .cornerRadius(25)
+                    // Restore purchases button
+                    Button("Restore Purchases") {
+                        Task {
+                            await storeKit.restorePurchases()
                         }
-                        .disabled(storeKit.isLoading)
-                        
-                        Button("Restore Purchases") {
-                            print("=== RESTORE PURCHASES TAPPED ===")
-                            Task {
-                                await storeKit.restorePurchases()
-                            }
-                        }
-                        .font(.caption)
-                        .foregroundColor(Color(red: 0.53, green: 0.81, blue: 0.92))
-                        .disabled(storeKit.isLoading)
                     }
-                }
-
-                // Error message and debug info
-                VStack(spacing: 4) {
-                    if let errorMessage = storeKit.errorMessage {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                            .multilineTextAlignment(.center)
-                    }
-                    
-                    // Debug info for sandbox testing
-                    if storeKit.products.isEmpty && !storeKit.isLoading {
-                        Text("Debug: No products loaded. Check App Store Connect configuration.")
-                            .font(.caption2)
-                            .foregroundColor(.orange)
-                            .multilineTextAlignment(.center)
-                    }
+                    .font(.caption)
+                    .foregroundColor(Color(red: 0.53, green: 0.81, blue: 0.92))
+                    .disabled(storeKit.isLoading)
                 }
             }
             .padding(.horizontal, 24)
@@ -233,54 +150,30 @@ struct SubscriptionView: View {
             .padding(.top, 20)
         }
         .task {
-            print("=== SUBSCRIPTION VIEW LOADING ===")
             await storeKit.loadProducts()
-            print("=== PRODUCTS LOADED: \(storeKit.products.count) ===")
         }
     }
     
     private func handlePurchase() async {
-        print("=== HANDLE PURCHASE STARTED ===")
-        
-        // First try to reload products if none available
+        // Reload products if none available
         if storeKit.monthlyProduct == nil {
-            print("No product available, reloading...")
             await storeKit.loadProducts()
         }
         
         guard let product = storeKit.monthlyProduct else {
-            print("ERROR: Still no monthly product available after reload")
-            await MainActor.run {
-                storeKit.errorMessage = "Subscription not available. Please check your network connection."
-            }
             return
         }
         
-        print("Product found: \(product.id), attempting purchase...")
-        print("Product type: \(product.type)")
-        
         do {
-            print("Calling storeKit.purchase...")
             let result = try await storeKit.purchase(product)
-            print("Purchase completed with result: \(result != nil ? "Success" : "Failed/Cancelled")")
             
             if result != nil {
-                print("Purchase successful, dismissing view")
                 await MainActor.run {
                     dismiss()
                 }
-            } else {
-                print("Purchase was cancelled or failed")
-                await MainActor.run {
-                    storeKit.errorMessage = "Purchase was cancelled"
-                }
             }
         } catch {
-            print("Purchase error: \(error)")
-            print("Error type: \(type(of: error))")
-            await MainActor.run {
-                storeKit.errorMessage = "Purchase failed: \(error.localizedDescription)"
-            }
+            // Error handling is done in StoreKitService
         }
     }
 }

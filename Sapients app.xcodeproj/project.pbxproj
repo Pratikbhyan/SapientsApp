@@ -13,6 +13,7 @@
 		642C11062DE951FC0002C862 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 642C11052DE951FC0002C862 /* Kingfisher */; };
 		642C11132DE975A00002C862 /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = 642C11122DE975A00002C862 /* Functions */; };
 		642C11152DE975A00002C862 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = 642C11142DE975A00002C862 /* Realtime */; };
+		643775032DF57D1B00F698F3 /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 643775022DF57D1B00F698F3 /* StoreKit.framework */; };
 		64C305C12DE7FE450046AEE0 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 64C305C02DE7FE450046AEE0 /* Auth */; };
 		64C305C42DE7FFCC0046AEE0 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 64C305C32DE7FFCC0046AEE0 /* GoogleSignIn */; };
 		64C305C62DE7FFCC0046AEE0 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 64C305C52DE7FFCC0046AEE0 /* GoogleSignInSwift */; };
@@ -53,6 +54,7 @@
 		641DB3CF2DE13EEA001A2BE4 /* Sapients app.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Sapients app.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		641DB3DC2DE13EEC001A2BE4 /* Sapients appTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Sapients appTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		641DB3E62DE13EEC001A2BE4 /* Sapients appUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Sapients appUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		643775022DF57D1B00F698F3 /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -85,6 +87,7 @@
 				642C11062DE951FC0002C862 /* Kingfisher in Frameworks */,
 				641DB4072DE14892001A2BE4 /* PostgREST in Frameworks */,
 				64C305C62DE7FFCC0046AEE0 /* GoogleSignInSwift in Frameworks */,
+				643775032DF57D1B00F698F3 /* StoreKit.framework in Frameworks */,
 				64C305C12DE7FE450046AEE0 /* Auth in Frameworks */,
 				641DB40B2DE14892001A2BE4 /* Supabase in Frameworks */,
 			);
@@ -131,6 +134,7 @@
 		642486672DE80D3400CF10FD /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				643775022DF57D1B00F698F3 /* StoreKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

@@ -222,6 +222,11 @@ class StoreKitService: NSObject, ObservableObject {
     var monthlyProduct: Product? {
         return products.first { $0.id == "com.sapients" }
     }
+    
+    var monthlyProductLocalizedPrice: String {
+        guard let product = monthlyProduct else { return "" }
+        return product.displayPrice
+    }
 }
 
 // MARK: - Store Errors

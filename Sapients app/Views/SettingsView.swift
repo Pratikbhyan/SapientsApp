@@ -22,6 +22,7 @@ struct AppIconOption: Identifiable, Hashable {
 
 struct SettingsView: View {
     @StateObject private var authManager = AuthManager.shared
+    @StateObject private var storeKit = StoreKitService.shared
     @State private var notificationsEnabled = true
     @State private var isShowingSubscriptionSheet = false
     @Environment(\.dismiss) var dismiss
@@ -150,26 +151,25 @@ struct SettingsView: View {
                         .background(Color.gray.opacity(0.1))
                         .clipShape(Capsule())
                         
-                        // Subscribe Row
-                        Button(action: {
-                            // TODO: Handle subscription logic
-                            // print("Subscribe button tapped")
-                            isShowingSubscriptionSheet = true
-                        }) {
-                            HStack {
-                                Text("Subscribe")
-                                    .font(.headline)
-                                    .foregroundColor(.primary)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .foregroundColor(.gray)
-                            }
+                        // Subscribe Row - CHANGE: Make entire row tappable and update text based on subscription status
+                        HStack {
+                            Text(storeKit.hasActiveSubscription ? "Subscribed" : "Subscribe")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: storeKit.hasActiveSubscription ? "checkmark.circle.fill" : "chevron.right")
+                                .foregroundColor(storeKit.hasActiveSubscription ? .green : .gray)
                         }
                         .padding(.horizontal)
                         .padding(.vertical, 10)
                         .background(Color.gray.opacity(0.1))
                         .clipShape(Capsule())
-                        .buttonStyle(PlainButtonStyle())
+                        .contentShape(Capsule()) // Makes entire area tappable
+                        .onTapGesture {
+                            if !storeKit.hasActiveSubscription {
+                                isShowingSubscriptionSheet = true
+                            }
+                        }
                         .sheet(isPresented: $isShowingSubscriptionSheet) {
                             SubscriptionView()
                         }
@@ -194,27 +194,26 @@ struct SettingsView: View {
                         .padding(.vertical, 10)
                         .background(Color.gray.opacity(0.1)) // Consistent with other rows
                         
-                        // Logout Row
-                        Button(action: {
-                            Task {
-                                await authManager.signOut()
-                                dismiss()
-                            }
-                        }) {
-                            HStack {
-                                Text("Logout")
-                                    .font(.headline)
-                                    .foregroundColor(.red)
-                                Spacer()
-                                Image(systemName: "rectangle.portrait.and.arrow.right")
-                                    .foregroundColor(.red)
-                            }
+                        // Logout Row - CHANGE: Make entire row tappable
+                        HStack {
+                            Text("Logout")
+                                .font(.headline)
+                                .foregroundColor(.red)
+                            Spacer()
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .foregroundColor(.red)
                         }
                         .padding(.horizontal)
                         .padding(.vertical, 10)
                         .background(Color.gray.opacity(0.1))
                         .clipShape(Capsule())
-                        .buttonStyle(PlainButtonStyle())
+                        .contentShape(Capsule()) // Makes entire area tappable
+                        .onTapGesture {
+                            Task {
+                                await authManager.signOut()
+                                dismiss()
+                            }
+                        }
                         
                         Spacer() // To push content to top if ScrollView is not full
                     }
@@ -232,7 +231,7 @@ struct SettingsView: View {
     struct SettingsView_Previews: PreviewProvider {
         static var previews: some View {
             // Wrap in NavigationView for preview context if SettingsView expects to be in one
-            NavigationView { 
+            NavigationView {
                 SettingsView()
             }
         }
