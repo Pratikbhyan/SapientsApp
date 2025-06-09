@@ -6,82 +6,80 @@ struct LoginView: View {
     @StateObject private var authViewModel = AuthViewModel()
     @EnvironmentObject var authManager: AuthManager // Use AuthManager from environment
 
-    // Controls for logo size and position
-    @State private var logoWidth: CGFloat = 400 // Adjust desired width here
-    @State private var logoHeight: CGFloat = 400 // Adjust desired height here
-    @State private var logoOffsetX: CGFloat = -50      // Adjust X offset (from left edge)
-    @State private var logoOffsetY: CGFloat = 10 // Adjust Y offset (negative moves up)
     var body: some View {
-        ZStack {
-            Color(red: 135/255.0, green: 206/255.0, blue: 235/255.0).ignoresSafeArea()
+        GeometryReader { geometry in
+            ZStack {
+                Color(red: 135/255.0, green: 206/255.0, blue: 235/255.0).ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                Spacer()
-                // App Icon
-                Image("app_icon") // Ensure "app_icon" is in Assets.xcassets
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: logoWidth, height: logoHeight)
-                    // Align the image's frame to the leading edge of the available space
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    // Apply offsets for fine-tuning position
-                    .offset(x: logoOffsetX, y: logoOffsetY)
-                    .padding(.bottom, 50) // Space below the logo complex
-                
-                Spacer()
-
-                // Buttons Container
-                VStack(spacing: 12) {
-
-                    if let errorMessage = authViewModel.errorMessage {
-                        Text(errorMessage)
-                            .foregroundColor(.red)
-                            .font(.caption)
-                            .padding(.vertical, 5)
-                    }
-
-                    if authViewModel.isLoading {
-                        ProgressView()
-                            .padding(.vertical, 10)
-                    } else {
-                                        // Sign In with Apple Button
-                                        AuthButton(imageName: "google_logo", text: "Continue with Google", backgroundColor: Color(white: 0.2), textColor: .white, action: {
-                        Task {
-                            // AuthManager will automatically update the isAuthenticated state upon successful Supabase sign-in.
-                            _ = await authViewModel.signInWithGoogle()
-                        }
-                    })
+                VStack(spacing: 0) {
+                    // App Icon - Full screen background
+                    Image("app_icon") // Ensure "app_icon" is in Assets.xcassets
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
+                        .ignoresSafeArea()
                     
-                    SignInWithAppleButton(
-                        onRequest: { request in
-                            // This part is handled by the AuthViewModel's signInWithApple method
-                            // when it creates and performs the request.
-                            // We just need to trigger the AuthViewModel's method.
-                        },
-                        onCompletion: { result in
-                            // This completion is for the button's action,
-                            // The actual token handling and Supabase call is in AuthViewModel's delegate methods.
-                            // AuthManager will automatically update the isAuthenticated state upon successful Supabase sign-in.
-                            // The result of Apple Sign-In is handled within AuthViewModel and its delegate methods.
-                        }
-                    )
-                    .signInWithAppleButtonStyle(.white) // Or .black, .whiteOutline
-                    .frame(height: 50) // Standard height
-                    .cornerRadius(10)
-                    .onTapGesture { // Use onTapGesture to call our ViewModel method
-                        authViewModel.signInWithApple()
-                    }
-                    .disabled(authViewModel.isLoading)
-                    .padding(.bottom, 30) // Increased from 10 to 30 for more black space
-                    } // End of else for isLoading
+                    Spacer()
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 30)
-                .padding(.bottom, (UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene)?.windows.first(where: { $0.isKeyWindow })?.safeAreaInsets.bottom ?? 0 > 0 ? 30 : 15) // Adjust bottom padding based on safe area
-                .background(Color.black)
-                .clipShape(RoundedCorner(radius: 30, corners: [.topLeft, .topRight]))
+                
+                // Overlay content on top of the image
+                VStack(spacing: 0) {
+                    Spacer()
+
+                    // Buttons Container
+                    VStack(spacing: 12) {
+
+                        if let errorMessage = authViewModel.errorMessage {
+                            Text(errorMessage)
+                                .foregroundColor(.red)
+                                .font(.caption)
+                                .padding(.vertical, 5)
+                        }
+
+                        if authViewModel.isLoading {
+                            ProgressView()
+                                .padding(.vertical, 10)
+                        } else {
+                            // Sign In with Apple Button
+                            AuthButton(imageName: "google_logo", text: "Continue with Google", backgroundColor: Color(white: 0.2), textColor: .white, action: {
+                                Task {
+                                    // AuthManager will automatically update the isAuthenticated state upon successful Supabase sign-in.
+                                    _ = await authViewModel.signInWithGoogle()
+                                }
+                            })
+                            
+                            SignInWithAppleButton(
+                                onRequest: { request in
+                                    // This part is handled by the AuthViewModel's signInWithApple method
+                                    // when it creates and performs the request.
+                                    // We just need to trigger the AuthViewModel's method.
+                                },
+                                onCompletion: { result in
+                                    // This completion is for the button's action,
+                                    // The actual token handling and Supabase call is in AuthViewModel's delegate methods.
+                                    // AuthManager will automatically update the isAuthenticated state upon successful Supabase sign-in.
+                                    // The result of Apple Sign-In is handled within AuthViewModel and its delegate methods.
+                                }
+                            )
+                            .signInWithAppleButtonStyle(.white) // Or .black, .whiteOutline
+                            .frame(height: 50) // Standard height
+                            .cornerRadius(10)
+                            .onTapGesture { // Use onTapGesture to call our ViewModel method
+                                authViewModel.signInWithApple()
+                            }
+                            .disabled(authViewModel.isLoading)
+                            .padding(.bottom, 30) // Increased from 10 to 30 for more black space
+                        } // End of else for isLoading
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 30)
+                    .padding(.bottom, max(30, geometry.safeAreaInsets.bottom + 15)) // Ensure proper bottom padding
+                    .background(Color.black.opacity(0.9)) // Semi-transparent background for better readability
+                    .clipShape(RoundedCorner(radius: 30, corners: [.topLeft, .topRight]))
+                }
+                .edgesIgnoringSafeArea(.bottom) // Allow black container to go to the bottom edge
             }
-            .edgesIgnoringSafeArea(.bottom) // Allow black container to go to the bottom edge
         }
     }
 }
