@@ -8,6 +8,7 @@
 import SwiftUI
 import Supabase
 import GoogleSignIn
+import UserNotifications
 
 // Enum to identify tabs
 enum TabIdentifier {
@@ -21,112 +22,130 @@ struct Sapients_appApp: App {
     @StateObject private var audioPlayer = AudioPlayerService.shared
     @StateObject private var miniPlayerState = MiniPlayerState(player: AudioPlayerService.shared)
     @StateObject private var quickNotesRepository = QuickNotesRepository.shared
+    @StateObject private var notificationService = NotificationService.shared
+    @StateObject private var storeKit = StoreKitService.shared
     @State private var selectedTab: TabIdentifier = .nowPlaying // Default tab
 
     init() {
         configureGoogleSignIn()
+        setupNotificationHandling()
     }
 
     var body: some Scene {
         WindowGroup {
             ZStack(alignment: .bottom) {
-                    Group {
-                    if authManager.isAuthenticated {
-                        TabView(selection: $selectedTab) {
-                            // Tab 1: Now Playing (loads daily content)
-                            DailyContentViewLoader()
-                                .tag(TabIdentifier.nowPlaying)
-                                .tabItem {
-                                    Label("Now Playing", systemImage: "play.circle.fill")
-                                }
-
-                            // Tab 2: Content List (Browse)
-                            NavigationView {
-                                ContentListView()
-                            }
-                            .tag(TabIdentifier.library)
-                            .tabItem {
-                                Label("Library", systemImage: "music.note.list")
-                            }
-
-                            // Tab 3: Quick Notes
-                            QuickNotesView()
-                                .tag(TabIdentifier.quickNotes)
-                                .tabItem {
-                                    Label("Quick Notes", systemImage: "note.text")
-                                }
-                        }
-                        .onChange(of: selectedTab) { _, newTab in
-                            if newTab == .nowPlaying {
-                                miniPlayerState.isVisible = false
-                            } else {
-                                // For other tabs, MiniPlayerState's internal logic
-                                // (based on hasLoadedTrack) will determine actual visibility.
-                                // We just signal that it *can* be visible from the tab's perspective.
-                                miniPlayerState.isVisible = audioPlayer.hasLoadedTrack
-                            }
-                        }
-                    } else {
-                        LoginView()
-                    }
-                }
-                .onOpenURL { url in
-                    Task {
-                        do {
-                            try await SupabaseManager.shared.client.auth.session(from: url)
-                            print("Deep link processed by Supabase via onOpenURL. AuthManager will handle state update.")
-                        } catch {
-                            print("Error processing deeplink in onOpenURL: \(error.localizedDescription)")
-                        }
-                    }
-                }
-
+                mainContent
+                
                 // MiniPlayerView overlay
-                // Hide if the full player is presented, regardless of other visibility flags.
-                // MiniPlayerView overlay
-                // Show if isVisible is true AND the full player is NOT being presented AND not on Now Playing tab
                 if miniPlayerState.isVisible && !miniPlayerState.isPresentingFullPlayer && selectedTab != .nowPlaying {
                     MiniPlayerView()
                 }
             }
             .sheet(isPresented: $miniPlayerState.isPresentingFullPlayer) {
-                if let contentToPlay = audioPlayer.currentContent {
-                    ZStack {
-                        // Add consistent background for miniplayer-opened PlayingView
-                        BlurredBackgroundView()
-                            .edgesIgnoringSafeArea(.all)
-                        
-                        PlayingView(
-                            content: contentToPlay,
-                            repository: contentRepository,
-                            audioPlayer: audioPlayer,
-                            isLoadingTranscription: .constant(false),
-                            onDismissTapped: {
-                                miniPlayerState.isPresentingFullPlayer = false
-                            }
-                        )
-                    }
-                    .preferredColorScheme(.dark)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-                    .environmentObject(authManager)
-                    .environmentObject(contentRepository)
-                    .environmentObject(audioPlayer)
-                    .environmentObject(miniPlayerState)
-                    .environmentObject(quickNotesRepository)
-                } else {
-                    Color.black
-                        .onAppear {
-                            print("ERROR: PlayingView presented without content!")
-                            miniPlayerState.isPresentingFullPlayer = false
-                        }
-                }
+                fullPlayerSheet
             }
             .environmentObject(authManager)
             .environmentObject(contentRepository)
             .environmentObject(audioPlayer)
             .environmentObject(miniPlayerState)
             .environmentObject(quickNotesRepository)
+            .environmentObject(notificationService)
+            .environmentObject(storeKit)
+        }
+    }
+    
+    @ViewBuilder
+    private var mainContent: some View {
+        Group {
+            if authManager.isAuthenticated {
+                TabView(selection: $selectedTab) {
+                    // Tab 1: Now Playing (loads daily content)
+                    DailyContentViewLoader()
+                        .tag(TabIdentifier.nowPlaying)
+                        .tabItem {
+                            Label("Now Playing", systemImage: "play.circle.fill")
+                        }
+
+                    // Tab 2: Content List (Browse)
+                    NavigationView {
+                        ContentListView()
+                    }
+                    .tag(TabIdentifier.library)
+                    .tabItem {
+                        Label("Library", systemImage: "music.note.list")
+                    }
+
+                    // Tab 3: Quick Notes
+                    QuickNotesView()
+                        .tag(TabIdentifier.quickNotes)
+                        .tabItem {
+                            Label("Quick Notes", systemImage: "note.text")
+                        }
+                }
+                .onChange(of: selectedTab) { _, newTab in
+                    if newTab == .nowPlaying {
+                        miniPlayerState.isVisible = false
+                    } else {
+                        // For other tabs, MiniPlayerState's internal logic
+                        // (based on hasLoadedTrack) will determine actual visibility.
+                        // We just signal that it *can* be visible from the tab's perspective.
+                        miniPlayerState.isVisible = audioPlayer.hasLoadedTrack
+                    }
+                }
+                .onAppear {
+                    notificationService.setupDailyNotifications()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .dailyEpisodeNotificationTapped)) { _ in
+                    selectedTab = .nowPlaying
+                }
+            } else {
+                LoginView()
+            }
+        }
+        .onOpenURL { url in
+            Task {
+                do {
+                    try await SupabaseManager.shared.client.auth.session(from: url)
+                    print("Deep link processed by Supabase via onOpenURL. AuthManager will handle state update.")
+                } catch {
+                    print("Error processing deeplink in onOpenURL: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var fullPlayerSheet: some View {
+        if let contentToPlay = audioPlayer.currentContent {
+            ZStack {
+                // Add consistent background for miniplayer-opened PlayingView
+                BlurredBackgroundView()
+                    .edgesIgnoringSafeArea(.all)
+                
+                PlayingView(
+                    content: contentToPlay,
+                    repository: contentRepository,
+                    audioPlayer: audioPlayer,
+                    isLoadingTranscription: .constant(false),
+                    onDismissTapped: {
+                        miniPlayerState.isPresentingFullPlayer = false
+                    }
+                )
+            }
+            .preferredColorScheme(.dark)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .environmentObject(authManager)
+            .environmentObject(contentRepository)
+            .environmentObject(audioPlayer)
+            .environmentObject(miniPlayerState)
+            .environmentObject(quickNotesRepository)
+        } else {
+            Color.black
+                .onAppear {
+                    print("ERROR: PlayingView presented without content!")
+                    miniPlayerState.isPresentingFullPlayer = false
+                }
         }
     }
 
@@ -149,4 +168,35 @@ struct Sapients_appApp: App {
         GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
         print("Google Sign-In configured with CLIENT_ID from main Info.plist: \(clientID)")
     }
+    
+    private func setupNotificationHandling() {
+        UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
+    }
+}
+
+class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, ObservableObject {
+    static let shared = NotificationDelegate()
+    
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.alert, .sound, .badge])
+    }
+    
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        
+        let userInfo = response.notification.request.content.userInfo
+        
+        if let type = userInfo["type"] as? String, type == "daily_episode" {
+            print("User tapped daily episode notification")
+            
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .dailyEpisodeNotificationTapped, object: nil)
+            }
+        }
+        
+        completionHandler()
+    }
+}
+
+extension Notification.Name {
+    static let dailyEpisodeNotificationTapped = Notification.Name("dailyEpisodeNotificationTapped")
 }

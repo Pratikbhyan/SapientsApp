@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit // Needed for UIApplication
+import UserNotifications
 
 // Helper struct for App Icon options
 // Helper struct for App Icon options
@@ -23,6 +24,7 @@ struct AppIconOption: Identifiable, Hashable {
 struct SettingsView: View {
     @StateObject private var authManager = AuthManager.shared
     @StateObject private var storeKit = StoreKitService.shared
+    @StateObject private var notificationService = NotificationService.shared
     @State private var notificationsEnabled = true
     @State private var isShowingSubscriptionSheet = false
     @Environment(\.dismiss) var dismiss
@@ -137,20 +139,26 @@ struct SettingsView: View {
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(10)
                         
-                        // Notifications Toggle
                         HStack {
-                            Text("Notifications")
+                            Text("Daily Episode Notifications")
                                 .font(.headline)
                             Spacer()
                             Toggle("", isOn: $notificationsEnabled)
                                 .labelsHidden()
                                 .tint(.accentColor)
+                                .onChange(of: notificationsEnabled) { _, isEnabled in
+                                    if isEnabled {
+                                        notificationService.setupDailyNotifications()
+                                    } else {
+                                        notificationService.cancelDailyNotifications()
+                                    }
+                                }
                         }
                         .padding(.horizontal)
                         .padding(.vertical, 10)
                         .background(Color.gray.opacity(0.1))
                         .clipShape(Capsule())
-                        
+
                         // Subscribe Row - CHANGE: Make entire row tappable and update text based on subscription status
                         HStack {
                             Text(storeKit.hasActiveSubscription ? "Subscribed" : "Subscribe")
@@ -163,7 +171,7 @@ struct SettingsView: View {
                         .padding(.horizontal)
                         .padding(.vertical, 10)
                         .background(Color.gray.opacity(0.1))
-                        .clipShape(Capsule())
+                        .clipShape(Capsule()) 
                         .contentShape(Capsule()) // Makes entire area tappable
                         .onTapGesture {
                             if !storeKit.hasActiveSubscription {
@@ -206,7 +214,7 @@ struct SettingsView: View {
                         .padding(.horizontal)
                         .padding(.vertical, 10)
                         .background(Color.gray.opacity(0.1))
-                        .clipShape(Capsule())
+                        .clipShape(Capsule()) 
                         .contentShape(Capsule()) // Makes entire area tappable
                         .onTapGesture {
                             Task {
@@ -222,12 +230,22 @@ struct SettingsView: View {
                 .onAppear { // Correctly attached to ScrollView
                     // Set the initial selected icon name based on the current app icon
                     self.currentAlternateIconName = UIApplication.shared.alternateIconName
+                    
+                    checkNotificationStatus()
                 }
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline) // Or .large, as preferred
     }
     
+    private func checkNotificationStatus() {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            DispatchQueue.main.async {
+                self.notificationsEnabled = settings.authorizationStatus == .authorized
+            }
+        }
+    }
+
     struct SettingsView_Previews: PreviewProvider {
         static var previews: some View {
             // Wrap in NavigationView for preview context if SettingsView expects to be in one

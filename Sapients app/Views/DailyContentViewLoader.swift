@@ -61,6 +61,11 @@ struct DailyContentViewLoader: View {
         .task {
             await loadDailyContent()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .dailyEpisodeNotificationTapped)) { _ in
+            Task {
+                await loadDailyContent()
+            }
+        }
     }
 
     private func loadDailyContent() async {
@@ -68,6 +73,9 @@ struct DailyContentViewLoader: View {
         errorMessage = nil
         do {
             dailyContent = try await repository.fetchDailyContent()
+            
+            // Episodes are cached only when user selects to play them
+            
         } catch {
             self.errorMessage = error.localizedDescription
             print("Failed to load daily content from DailyContentViewLoader: \(error)")

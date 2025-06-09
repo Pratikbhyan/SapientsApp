@@ -103,8 +103,8 @@ struct ContentDetailView: View {
             return
         }
 
-        audioPlayer.loadAudio(from: newAudioURL, for: content)
-        audioPlayer.play()
+        // Pass content object for subscription-aware caching with autoPlay enabled
+        audioPlayer.loadAudio(from: newAudioURL, for: content, autoPlay: true)
 
         showPlayer = true
 
@@ -112,6 +112,10 @@ struct ContentDetailView: View {
         self.isLoadingTranscription = true
         await repository.fetchTranscriptions(for: content.id, from: content.transcriptionUrl)
         self.isLoadingTranscription = false
+    }
+    
+    private func triggerPreemptiveCaching() async {
+        print(" Preemptive caching disabled - episodes cached only when user plays them")
     }
 }
 

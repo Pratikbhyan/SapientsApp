@@ -40,6 +40,9 @@ class NotificationService: ObservableObject {
         content.body = "Your daily Sapients episode is ready to listen."
         content.sound = .default
         
+        // Add custom data to help handle the notification when tapped
+        content.userInfo = ["type": "daily_episode", "date": ISO8601DateFormatter().string(from: Date())]
+        
         // Schedule for 5:00 AM daily
         var dateComponents = DateComponents()
         dateComponents.hour = 5
@@ -73,43 +76,20 @@ class NotificationService: ObservableObject {
         let today = Calendar.current.startOfDay(for: Date())
         
         // Check if there's content for today
-        // You'll need to modify this based on your ContentRepository logic
-        let contentRepo = ContentRepository()
+        let contentRepo = await ContentRepository()
         
-        // This is a simplified check - you might need to adjust based on your data structure
+        // Check if there's content scheduled for today
         return await contentRepo.hasContentForDate(today)
+    }
+    
+    func getTodaysEpisode() async -> Content? {
+        let today = Calendar.current.startOfDay(for: Date())
+        let contentRepo = await ContentRepository()
+        return await contentRepo.getContentForDate(today)
     }
     
     // MARK: - Cancel Daily Notifications
     func cancelDailyNotifications() {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["daily_episode"])
-    }
-}
-
-// MARK: - ContentRepository Extension
-extension ContentRepository {
-    func hasContentForDate(_ date: Date) async -> Bool {
-        // Implement this based on your current data fetching logic
-        // This is a placeholder - you'll need to check your Supabase data
-        do {
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "yyyy-MM-dd"
-            let dateString = dateFormatter.string(from: date)
-            
-            // Check if there's content for this date
-            // Adjust this query based on your actual database structure
-            let response: [Content] = try await SupabaseManager.shared.client
-                .from("content")
-                .select()
-                .gte("created_at", value: dateString)
-                .lt("created_at", value: dateString + "T23:59:59")
-                .execute()
-                .value
-            
-            return !response.isEmpty
-        } catch {
-            print("Error checking for content: \(error)")
-            return false
-        }
     }
 }

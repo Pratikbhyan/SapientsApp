@@ -11,6 +11,8 @@ class AudioPlayerService: ObservableObject {
     private var playerItem: AVPlayerItem?
     private var timeObserver: Any?
     
+    private let cacheManager = AudioCacheManager.shared
+    
     @Published var isPlaying = false
     @Published var currentTime: TimeInterval = 0
     @Published var duration: TimeInterval = 0
@@ -18,6 +20,7 @@ class AudioPlayerService: ObservableObject {
     @Published var currentPlaybackRate: Float = 1.0
     @Published var hasLoadedTrack: Bool = false
     @Published var currentContent: Content? = nil
+    @Published var isLoadingAudio: Bool = false
     private(set) var currentLoadedURL: URL?
     
     private var currentArtwork: MPMediaItemArtwork?
@@ -119,7 +122,17 @@ class AudioPlayerService: ObservableObject {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
     
-    func loadAudio(from url: URL, for content: Content) {
+    func loadAudio(from urlString: String, for content: Content, autoPlay: Bool = false) {
+        guard let remoteURL = URL(string: urlString) else {
+            print("❌ Invalid audio URL: \(urlString)")
+            return
+        }
+        
+        loadAudio(from: remoteURL, for: content, autoPlay: autoPlay)
+    }
+    
+    func loadAudio(from remoteURL: URL, for content: Content, autoPlay: Bool = false) {
+        // Clean up previous audio
         if let timeObserver = timeObserver, let player = player {
             player.removeTimeObserver(timeObserver)
             self.timeObserver = nil
@@ -128,18 +141,41 @@ class AudioPlayerService: ObservableObject {
         cancellables.removeAll()
 
         self.isPlaying = false
+        self.isLoadingAudio = true
         self.currentTime = 0
         self.duration = 0
         self.currentTranscriptionIndex = 0
         self.currentLoadedURL = nil
-        self.currentContent = nil
+        self.currentContent = content
         self.currentArtwork = nil
         
+        print("🎵 Loading audio for: \(content.title)")
+        
+        // Use cache manager with content info for subscription-aware caching
+        cacheManager.getAudioURL(for: remoteURL, content: content, priority: .high) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                
+                switch result {
+                case .success(let audioURL):
+                    self.setupAudioPlayer(with: audioURL, content: content, autoPlay: autoPlay)
+                case .failure(let error):
+                    print("❌ Failed to load audio: \(error.localizedDescription)")
+                    self.isLoadingAudio = false
+                    // Fallback to direct URL if cache fails
+                    self.setupAudioPlayer(with: remoteURL, content: content, autoPlay: autoPlay)
+                }
+            }
+        }
+    }
+    
+    private func setupAudioPlayer(with url: URL, content: Content, autoPlay: Bool = false) {
         playerItem = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: playerItem)
         self.currentLoadedURL = url
         self.currentContent = content
         self.hasLoadedTrack = true
+        self.isLoadingAudio = false
         
         loadArtworkOnce()
         
@@ -150,18 +186,33 @@ class AudioPlayerService: ObservableObject {
                     DispatchQueue.main.async {
                         self.duration = CMTimeGetSeconds(loadedDuration)
                         self.updateNowPlayingInfo()
+                        
+                        // Auto-play if requested
+                        if autoPlay {
+                            self.play()
+                        }
                     }
                 } catch {
                     print("Failed to load duration: \(error)")
                     DispatchQueue.main.async {
                         self.duration = 0
                         self.updateNowPlayingInfo()
+                        
+                        // Auto-play if requested, even if duration loading failed
+                        if autoPlay {
+                            self.play()
+                        }
                     }
                 }
             }
         } else {
             self.duration = 0
             self.updateNowPlayingInfo()
+            
+            // Auto-play if requested
+            if autoPlay {
+                self.play()
+            }
         }
         
         timeObserver = player?.addPeriodicTimeObserver(
@@ -188,8 +239,14 @@ class AudioPlayerService: ObservableObject {
             .store(in: &cancellables)
             
         updateNowPlayingInfo()
+        
+        print("✅ Audio player setup complete for: \(content.title)")
     }
     
+    func preloadUpcomingContent(_ contents: [Content]) {
+        print("ℹ️ Preemptive caching disabled - episodes cached only when user plays them")
+    }
+
     func play() {
         do {
             try AVAudioSession.sharedInstance().setActive(true)

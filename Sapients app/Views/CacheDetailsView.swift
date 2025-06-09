@@ -64,16 +64,15 @@ struct CacheDetailsView: View {
                     // Actions
                     VStack(spacing: 12) {
                         Button(action: {
-                            let repository = ContentRepository()
-                            cacheManager.cacheUpcomingEpisodes(from: repository)
+                            print("ℹ️ Preemptive caching disabled - episodes cached only when user plays them")
                         }) {
                             HStack {
-                                Image(systemName: "arrow.down.circle.fill")
-                                Text("Cache Upcoming Episodes")
+                                Image(systemName: "info.circle.fill")
+                                Text("Cache on Play Only")
                             }
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.accentColor)
+                            .background(Color.blue)
                             .foregroundColor(.white)
                             .cornerRadius(10)
                         }

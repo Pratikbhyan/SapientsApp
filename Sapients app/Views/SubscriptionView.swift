@@ -47,7 +47,7 @@ struct SubscriptionView: View {
                         }
                     }) {
                         VStack(alignment: .center, spacing: 8) {
-                            Text("Monthly")
+                            Text("Subscribe Monthly")
                                 .font(.title2)
                                 .fontWeight(.bold)
                                 .foregroundColor(.primary)
@@ -75,7 +75,7 @@ struct SubscriptionView: View {
                 } else if storeKit.isLoading {
                     // Loading state
                     VStack(alignment: .center, spacing: 8) {
-                        Text("Subscribe ˙Monthly")
+                        Text("Subscribe Monthly")
                             .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
@@ -99,7 +99,7 @@ struct SubscriptionView: View {
                         }
                     }) {
                         VStack(alignment: .center, spacing: 8) {
-                            Text("Monthly Subscription")
+                            Text("Subscribe Monthly")
                                 .font(.title2)
                                 .fontWeight(.bold)
                                 .foregroundColor(.primary)

@@ -131,13 +131,39 @@ class ContentRepository: ObservableObject {
         self.error = nil
 
         do {
-            let response: [Content] = try await supabase
+            // Get today's date in user's timezone
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+            let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)!
+            
+            // Format dates for Supabase query (ISO 8601 format)
+            let formatter = ISO8601DateFormatter()
+            let todayString = formatter.string(from: today)
+            let tomorrowString = formatter.string(from: tomorrow)
+            
+            // First try to get content scheduled for today (using publish_on)
+            var response: [Content] = try await supabase
                 .from("content")
-                .select("id, title, description, audio_url, image_url, created_at, publish_on, transcription_url") // Explicitly select all, including new field
-                .order("created_at", ascending: false)
+                .select("id, title, description, audio_url, image_url, created_at, publish_on, transcription_url")
+                .gte("publish_on", value: todayString)
+                .lt("publish_on", value: tomorrowString)
+                .order("publish_on", ascending: false)
                 .limit(1)
                 .execute()
                 .value
+            
+            // If no content scheduled for today, get the latest available content
+            if response.isEmpty {
+                let now = formatter.string(from: Date())
+                response = try await supabase
+                    .from("content")
+                    .select("id, title, description, audio_url, image_url, created_at, publish_on, transcription_url")
+                    .or("publish_on.lte.\(now),publish_on.is.null")
+                    .order("created_at", ascending: false)
+                    .limit(1)
+                    .execute()
+                    .value
+            }
 
             self.isLoading = false
             return response.first
@@ -147,4 +173,57 @@ class ContentRepository: ObservableObject {
             throw error
         }
     }
-} 
+    
+    func hasContentForDate(_ date: Date) async -> Bool {
+        do {
+            let calendar = Calendar.current
+            let startOfDay = calendar.startOfDay(for: date)
+            let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+            
+            let formatter = ISO8601DateFormatter()
+            let startString = formatter.string(from: startOfDay)
+            let endString = formatter.string(from: endOfDay)
+            
+            // Check for content scheduled for this specific date
+            let response: [Content] = try await supabase
+                .from("content")
+                .select("id", count: .exact)
+                .gte("publish_on", value: startString)
+                .lt("publish_on", value: endString)
+                .execute()
+                .value
+            
+            return !response.isEmpty
+        } catch {
+            print("Error checking for content on date: \(error)")
+            return false
+        }
+    }
+    
+    func getContentForDate(_ date: Date) async -> Content? {
+        do {
+            let calendar = Calendar.current
+            let startOfDay = calendar.startOfDay(for: date)
+            let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+            
+            let formatter = ISO8601DateFormatter()
+            let startString = formatter.string(from: startOfDay)
+            let endString = formatter.string(from: endOfDay)
+            
+            let response: [Content] = try await supabase
+                .from("content")
+                .select("id, title, description, audio_url, image_url, created_at, publish_on, transcription_url")
+                .gte("publish_on", value: startString)
+                .lt("publish_on", value: endString)
+                .order("publish_on", ascending: false)
+                .limit(1)
+                .execute()
+                .value
+            
+            return response.first
+        } catch {
+            print("Error fetching content for date: \(error)")
+            return nil
+        }
+    }
+}
