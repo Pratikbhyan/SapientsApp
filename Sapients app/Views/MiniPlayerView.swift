@@ -43,13 +43,25 @@ struct MiniPlayerView: View {
 
                     Spacer()
 
-                    // Play/Pause Button
-                    Button(action: { audioPlayer.togglePlayPause() }) {
-                        Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 22))
-                            .foregroundColor(Color(UIColor.label))
-                            .frame(width: 40, height: 40) // Increase tap area
+                    Button(action: { 
+                        if !audioPlayer.isBuffering {
+                            audioPlayer.togglePlayPause() 
+                        }
+                    }) {
+                        Group {
+                            if audioPlayer.isBuffering {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: Color(UIColor.label)))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(Color(UIColor.label))
+                            }
+                        }
+                        .frame(width: 40, height: 40) // Increase tap area
                     }
+                    .disabled(audioPlayer.isBuffering)
 
                     // Close Button
                     Button(action: {

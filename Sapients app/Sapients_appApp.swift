@@ -94,6 +94,10 @@ struct Sapients_appApp: App {
                 }
                 .onAppear {
                     notificationService.setupDailyNotifications()
+                    
+                    Timer.scheduledTimer(withTimeInterval: 86400, repeats: true) { _ in
+                        notificationService.refreshNotifications()
+                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .dailyEpisodeNotificationTapped)) { _ in
                     selectedTab = .nowPlaying

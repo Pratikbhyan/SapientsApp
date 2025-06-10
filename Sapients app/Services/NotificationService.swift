@@ -10,7 +10,7 @@ class NotificationService: ObservableObject {
     func setupDailyNotifications() {
         requestNotificationPermission { granted in
             if granted {
-                self.scheduleDailyEpisodeNotification()
+                self.scheduleSmartDailyNotifications()
             }
         }
     }
@@ -29,67 +29,115 @@ class NotificationService: ObservableObject {
         }
     }
     
-    // MARK: - Schedule Daily 5 AM Notification
-    private func scheduleDailyEpisodeNotification() {
-        // Remove any existing daily episode notifications
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["daily_episode"])
+    // MARK: - Schedule Smart Daily Notifications (Only When Content Available)
+    private func scheduleSmartDailyNotifications() {
+        // Remove any existing notifications
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
         
-        // Create notification content
-        let content = UNMutableNotificationContent()
-        content.title = "New Episode Available!"
-        content.body = "Your daily Sapients episode is ready to listen."
-        content.sound = .default
+        Task {
+            await scheduleNotificationsForUpcomingDays()
+        }
+    }
+    
+    private func scheduleNotificationsForUpcomingDays() async {
+        let calendar = Calendar.current
         
-        // Add custom data to help handle the notification when tapped
-        content.userInfo = ["type": "daily_episode", "date": ISO8601DateFormatter().string(from: Date())]
+        let contentRepo = await MainActor.run { ContentRepository() }
         
-        // Schedule for 5:00 AM daily
-        var dateComponents = DateComponents()
-        dateComponents.hour = 5
-        dateComponents.minute = 0
-        
-        let trigger = UNCalendarNotificationTrigger(
-            dateMatching: dateComponents, 
-            repeats: true
-        )
-        
-        // Create the request
-        let request = UNNotificationRequest(
-            identifier: "daily_episode",
-            content: content,
-            trigger: trigger
-        )
-        
-        // Add the request
-        UNUserNotificationCenter.current().add(request) { error in
-            if let error = error {
-                print("Error scheduling daily notification: \(error.localizedDescription)")
-            } else {
-                print("Daily episode notification scheduled for 5:00 AM")
+        // Schedule notifications for the next 30 days (you can adjust this)
+        for daysAhead in 0...30 {
+            guard let targetDate = calendar.date(byAdding: .day, value: daysAhead, to: Date()) else { continue }
+            
+            // Check if content is available for this date
+            let hasContent = await contentRepo.hasContentAvailableAt5AM(for: targetDate)
+            
+            if hasContent {
+                // Get the content to create a personalized notification
+                if let content = await contentRepo.getContentAvailableAt5AM(for: targetDate) {
+                    await scheduleNotificationForDate(targetDate, content: content)
+                }
             }
         }
     }
     
-    // MARK: - Check if new episode is available
-    func checkForNewEpisode() async -> Bool {
-        // Get today's date
-        let today = Calendar.current.startOfDay(for: Date())
+    private func scheduleNotificationForDate(_ date: Date, content: Content) async {
+        let calendar = Calendar.current
+        let dateComponents = calendar.dateComponents([.year, .month, .day], from: date)
         
-        // Check if there's content for today
-        let contentRepo = await ContentRepository()
+        // Create notification content
+        let notificationContent = UNMutableNotificationContent()
+        notificationContent.title = "New Episode Available!"
+        notificationContent.body = "📻 \(content.title) is ready to listen"
+        notificationContent.sound = .default
         
-        // Check if there's content scheduled for today
-        return await contentRepo.hasContentForDate(today)
+        // Add custom data
+        notificationContent.userInfo = [
+            "type": "daily_episode",
+            "content_id": content.id.uuidString,
+            "date": ISO8601DateFormatter().string(from: date)
+        ]
+        
+        // Schedule for 5:00 AM on the specific date
+        var triggerComponents = dateComponents
+        triggerComponents.hour = 5
+        triggerComponents.minute = 0
+        triggerComponents.second = 0
+        
+        let trigger = UNCalendarNotificationTrigger(
+            dateMatching: triggerComponents,
+            repeats: false // Individual notifications, not repeating
+        )
+        
+        // Create unique identifier for each notification
+        let identifier = "daily_episode_\(content.id.uuidString)"
+        
+        let request = UNNotificationRequest(
+            identifier: identifier,
+            content: notificationContent,
+            trigger: trigger
+        )
+        
+        // Add the request
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+            print("✅ Scheduled notification for \(date) - \(content.title)")
+        } catch {
+            print("❌ Failed to schedule notification for \(date): \(error.localizedDescription)")
+        }
+    }
+    
+    // MARK: - Refresh Notifications (Call this periodically or when new content is added)
+    func refreshNotifications() {
+        print("🔄 Refreshing notifications...")
+        setupDailyNotifications()
+    }
+    
+    // MARK: - Check if new episode is available RIGHT NOW (at 5 AM)
+    func checkForNewEpisodeNow() async -> Bool {
+        let now = Date()
+        let calendar = Calendar.current
+        let currentHour = calendar.component(.hour, from: now)
+        
+        // Only consider it "new" if it's currently between 5 AM and 6 AM
+        guard currentHour == 5 else {
+            return false
+        }
+        
+        let today = calendar.startOfDay(for: now)
+        let contentRepo = await MainActor.run { ContentRepository() }
+        
+        return await contentRepo.hasContentAvailableAt5AM(for: today)
     }
     
     func getTodaysEpisode() async -> Content? {
         let today = Calendar.current.startOfDay(for: Date())
-        let contentRepo = await ContentRepository()
-        return await contentRepo.getContentForDate(today)
+        let contentRepo = await MainActor.run { ContentRepository() }
+        return await contentRepo.getContentAvailableAt5AM(for: today)
     }
     
-    // MARK: - Cancel Daily Notifications
+    // MARK: - Cancel All Notifications
     func cancelDailyNotifications() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["daily_episode"])
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        print("🗑️ All daily notifications cancelled")
     }
 }

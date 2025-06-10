@@ -267,12 +267,25 @@ struct DetailedAudioControls: View {
                             .font(.title2)
                     }
                     
-                    Button(action: { audioPlayer.togglePlayPause() }) {
-                        Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 58, height: 58)
+                    Button(action: { 
+                        if !audioPlayer.isBuffering {
+                            audioPlayer.togglePlayPause() 
+                        }
+                    }) {
+                        Group {
+                            if audioPlayer.isBuffering {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.2)
+                            } else {
+                                Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                            }
+                        }
+                        .frame(width: 58, height: 58)
                     }
+                    .disabled(audioPlayer.isBuffering)
                     
                     Button(action: { audioPlayer.seek(to: min(audioPlayer.duration, audioPlayer.currentTime + 10)) }) {
                         Image(systemName: "goforward.10")

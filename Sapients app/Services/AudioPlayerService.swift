@@ -21,6 +21,7 @@ class AudioPlayerService: ObservableObject {
     @Published var hasLoadedTrack: Bool = false
     @Published var currentContent: Content? = nil
     @Published var isLoadingAudio: Bool = false
+    @Published var isBuffering: Bool = false
     private(set) var currentLoadedURL: URL?
     
     private var currentArtwork: MPMediaItemArtwork?
@@ -132,6 +133,12 @@ class AudioPlayerService: ObservableObject {
     }
     
     func loadAudio(from remoteURL: URL, for content: Content, autoPlay: Bool = false) {
+        // Stop current audio immediately to prevent overlap
+        if let player = player {
+            player.pause()
+            self.isPlaying = false
+        }
+        
         // Clean up previous audio
         if let timeObserver = timeObserver, let player = player {
             player.removeTimeObserver(timeObserver)
@@ -140,6 +147,8 @@ class AudioPlayerService: ObservableObject {
         cancellables.forEach { $0.cancel() }
         cancellables.removeAll()
 
+        // Set buffering state immediately
+        self.isBuffering = true
         self.isPlaying = false
         self.isLoadingAudio = true
         self.currentTime = 0
@@ -162,6 +171,8 @@ class AudioPlayerService: ObservableObject {
                 case .failure(let error):
                     print("❌ Failed to load audio: \(error.localizedDescription)")
                     self.isLoadingAudio = false
+                    // Clear buffering state on error
+                    self.isBuffering = false
                     // Fallback to direct URL if cache fails
                     self.setupAudioPlayer(with: remoteURL, content: content, autoPlay: autoPlay)
                 }
@@ -176,6 +187,8 @@ class AudioPlayerService: ObservableObject {
         self.currentContent = content
         self.hasLoadedTrack = true
         self.isLoadingAudio = false
+        // Clear buffering state when player is ready
+        self.isBuffering = false
         
         loadArtworkOnce()
         
@@ -317,6 +330,8 @@ class AudioPlayerService: ObservableObject {
         self.currentContent = nil
         self.hasLoadedTrack = false
         self.currentArtwork = nil
+        // Clear buffering state when stopping
+        self.isBuffering = false
         
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
