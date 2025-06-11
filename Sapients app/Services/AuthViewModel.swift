@@ -1,25 +1,21 @@
 import Foundation
 import Combine
-import Supabase // This will cause an error until the SDK is correctly linked
-import GoogleSignIn // For Google Sign-In
-import AuthenticationServices // For Apple Sign-In
-import CryptoKit // For SHA256 hashing
+import Supabase 
+import GoogleSignIn 
+import AuthenticationServices 
+import CryptoKit 
 
 @MainActor
 class AuthViewModel: NSObject, ObservableObject, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
     @Published var isLoading = false
     @Published var errorMessage: String?
-    // @Published var isUserLoggedIn = false // This state is now managed by AuthManager
 
     private var supabase: SupabaseClient {
         SupabaseManager.shared.client
     }
 
-    
-    // MARK: - Sign in with Apple
     private var currentNonce: String?
 
-    // Utility to generate a random nonce for Apple Sign-In
     private func randomNonceString(length: Int = 32) -> String {
         precondition(length > 0)
         let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
@@ -51,12 +47,15 @@ class AuthViewModel: NSObject, ObservableObject, ASAuthorizationControllerDelega
     }
 
     func signInWithApple() {
+        isLoading = true
+        errorMessage = nil
+        
         let nonce = randomNonceString()
         currentNonce = nonce
         let appleIDProvider = ASAuthorizationAppleIDProvider()
         let request = appleIDProvider.createRequest()
         request.requestedScopes = [.fullName, .email]
-        request.nonce = sha256(nonce) // SHA256 hash of the nonce
+        request.nonce = sha256(nonce) 
 
         let authorizationController = ASAuthorizationController(authorizationRequests: [request])
         authorizationController.delegate = self
@@ -71,50 +70,40 @@ class AuthViewModel: NSObject, ObservableObject, ASAuthorizationControllerDelega
         return hashString
     }
 
-    // MARK: - ASAuthorizationControllerDelegate Methods
     func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
         guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential else {
             self.errorMessage = "Apple Sign-In credential issue."
-            print("AuthViewModel: Did not receive ASAuthorizationAppleIDCredential.")
+            self.isLoading = false
             return
-        }
-
-        print("AuthViewModel: Apple ID Credential received.")
-        print("AuthViewModel: User Identifier: \(appleIDCredential.user)")
-        if let fullName = appleIDCredential.fullName {
-            print("AuthViewModel: Full Name provided by Apple: Given: \(fullName.givenName ?? "nil"), Family: \(fullName.familyName ?? "nil"), Middle: \(fullName.middleName ?? "nil"), Prefix: \(fullName.namePrefix ?? "nil"), Suffix: \(fullName.nameSuffix ?? "nil"), Nickname: \(fullName.nickname ?? "nil")")
-        } else {
-            print("AuthViewModel: Full Name not provided by Apple.")
-        }
-        if let email = appleIDCredential.email {
-            print("AuthViewModel: Email provided by Apple: \(email)")
-        } else {
-            print("AuthViewModel: Email not provided by Apple.")
         }
 
         guard let nonce = currentNonce else {
             self.errorMessage = "Invalid state: A login callback was received, but no login request was sent."
-            print("AuthViewModel: Current nonce is nil.")
+            self.isLoading = false
             return
         }
+        
         guard let appleIDToken = appleIDCredential.identityToken else {
             self.errorMessage = "Unable to fetch identity token."
-            print("AuthViewModel: Apple ID Token is nil.")
+            self.isLoading = false
             return
         }
+        
         guard let idTokenString = String(data: appleIDToken, encoding: .utf8) else {
-            self.errorMessage = "Unable to serialize token string from data: \(appleIDToken.debugDescription)"
-            print("AuthViewModel: Could not convert Apple ID Token data to string.")
+            self.errorMessage = "Unable to serialize token string from data."
+            self.isLoading = false
             return
         }
 
         Task {
-            isLoading = true
-            errorMessage = nil
             do {
-                print("AuthViewModel: Attempting Supabase sign-in with Apple ID token.")
-                _ = try await supabase.auth.signInWithIdToken(credentials: .init(provider: .apple, idToken: idTokenString, nonce: nonce))
-                print("AuthViewModel: Successfully signed in with Apple via Supabase.")
+                let response = try await supabase.auth.signInWithIdToken(
+                    credentials: .init(
+                        provider: .apple, 
+                        idToken: idTokenString, 
+                        nonce: nonce
+                    )
+                )
 
                 var metadataToUpdate: [String: AnyJSON] = [:]
 
@@ -129,47 +118,69 @@ class AuthViewModel: NSObject, ObservableObject, ASAuthorizationControllerDelega
                     if !nameParts.isEmpty {
                         let combinedFullName = nameParts.joined(separator: " ")
                         metadataToUpdate["full_name"] = .string(combinedFullName)
-                        print("AuthViewModel: Preparing to update 'full_name' with: \(combinedFullName)")
-                    } else {
-                        print("AuthViewModel: No name parts to combine from Apple's fullName.")
                     }
-                } else {
-                    print("AuthViewModel: appleIDCredential.fullName was nil, cannot update 'full_name'.")
                 }
 
                 if let email = appleIDCredential.email, !email.isEmpty {
                     metadataToUpdate["email"] = .string(email)
-                    print("AuthViewModel: Preparing to update 'email' with: \(email)")
-                } else {
-                    print("AuthViewModel: appleIDCredential.email was nil or empty, cannot update 'email' in metadata.")
                 }
                 
                 if !metadataToUpdate.isEmpty {
-                    print("AuthViewModel: Attempting to update user metadata in Supabase with: \(metadataToUpdate)")
                     do {
                         let userAttributes = UserAttributes(data: metadataToUpdate)
                         _ = try await supabase.auth.update(user: userAttributes)
-                        print("AuthViewModel: Successfully updated user metadata for Apple Sign-In.")
                     } catch {
-                        print("AuthViewModel: Warning: Error updating user metadata for Apple Sign-In: \(error.localizedDescription). User is signed in, but metadata update failed.")
+                        // Silently handle metadata update errors
                     }
-                } else {
-                    print("AuthViewModel: No metadata to update for Supabase user.")
                 }
+                
+                await MainActor.run {
+                    self.isLoading = false
+                    self.errorMessage = nil
+                }
+                
             } catch {
-                print("AuthViewModel: Error signing in with Apple via Supabase: \(error.localizedDescription)")
-                self.errorMessage = error.localizedDescription
+                let errorDescription = error.localizedDescription
+                
+                await MainActor.run {
+                    if errorDescription.contains("unexpected_failure") || errorDescription.contains("500") {
+                        self.errorMessage = "Apple Sign-In service temporarily unavailable. Please try again later."
+                    } else if errorDescription.contains("invalid_request") {
+                        self.errorMessage = "Apple Sign-In configuration error. Please contact support."
+                    } else if errorDescription.contains("network") || errorDescription.contains("connection") {
+                        self.errorMessage = "Network error. Please check your connection and try again."
+                    } else {
+                        self.errorMessage = "Apple Sign-In failed. Please try again."
+                    }
+                    self.isLoading = false
+                }
             }
-            isLoading = false
         }
     }
 
     func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
-        print("Sign in with Apple errored: \(error)")
-        self.errorMessage = error.localizedDescription
+        if let authError = error as? ASAuthorizationError {
+            switch authError.code {
+            case .canceled:
+                self.errorMessage = nil 
+            case .failed:
+                self.errorMessage = "Apple Sign-In failed. Please try again."
+            case .invalidResponse:
+                self.errorMessage = "Invalid response from Apple. Please try again."
+            case .notHandled:
+                self.errorMessage = "Apple Sign-In not handled. Please try again."
+            case .unknown:
+                self.errorMessage = "Unknown Apple Sign-In error. Please try again."
+            @unknown default:
+                self.errorMessage = "Apple Sign-In error. Please try again."
+            }
+        } else {
+            self.errorMessage = "Apple Sign-In error. Please try again."
+        }
+        
+        self.isLoading = false
     }
 
-    // MARK: - ASAuthorizationControllerPresentationContextProviding Methods
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
         guard let windowScene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
               let window = windowScene.windows.first(where: { $0.isKeyWindow }) else {
@@ -178,7 +189,6 @@ class AuthViewModel: NSObject, ObservableObject, ASAuthorizationControllerDelega
         return window
     }
 
-    // MARK: - Sign in with Google
     func signInWithGoogle() async -> Bool {
         isLoading = true
         errorMessage = nil
@@ -188,7 +198,6 @@ class AuthViewModel: NSObject, ObservableObject, ASAuthorizationControllerDelega
         let presentingViewController = windowScene?.windows.first(where: { $0.isKeyWindow })?.rootViewController
 
         guard let rootViewController = presentingViewController else {
-            print("Could not get root view controller for Google Sign-In.")
             self.errorMessage = "Could not get root view controller for Google Sign-In."
             self.isLoading = false
             return false
@@ -198,14 +207,12 @@ class AuthViewModel: NSObject, ObservableObject, ASAuthorizationControllerDelega
             try await GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController)
             
             guard let googleUser = GIDSignIn.sharedInstance.currentUser else {
-                print("Google Sign-In failed or was cancelled, currentUser is nil.")
                 self.errorMessage = "Google Sign-In failed or was cancelled by user."
                 self.isLoading = false
                 return false
             }
             
             guard let idToken = googleUser.idToken?.tokenString else {
-                print("Google ID token missing after successful sign-in.")
                 self.errorMessage = "Google ID token missing."
                 self.isLoading = false
                 return false
@@ -213,18 +220,15 @@ class AuthViewModel: NSObject, ObservableObject, ASAuthorizationControllerDelega
             
             try await supabase.auth.signInWithIdToken(credentials: .init(provider: .google, idToken: idToken, nonce: nil))
             
-            print("Successfully signed in with Google.")
             self.isLoading = false
             return true
         } catch {
-            print("Error signing in with Google: \(error.localizedDescription)")
             self.errorMessage = error.localizedDescription
             self.isLoading = false
             return false
         }
     }
     
-    // MARK: - Sign Out
     func signOut() async {
         isLoading = true
         errorMessage = nil

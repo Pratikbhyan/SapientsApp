@@ -4,6 +4,8 @@ import StoreKit
 struct SubscriptionView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var storeKit = StoreKitService.shared
+    @State private var showingTerms = false
+    @State private var showingPrivacy = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,6 +41,19 @@ struct SubscriptionView: View {
             
             // Bottom subscription area
             VStack(spacing: 20) {
+                VStack(spacing: 12) {
+                    Text("Unlock Full Access")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Text("Get unlimited access to all episodes and premium content")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.bottom, 8)
+                
                 // Monthly subscription card as button
                 if let monthlyProduct = storeKit.monthlyProduct {
                     Button(action: {
@@ -47,7 +62,16 @@ struct SubscriptionView: View {
                         }
                     }) {
                         VStack(alignment: .center, spacing: 8) {
-                            Text("Subscribe Monthly")
+                            Text("Pro Plan - Monthly")
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
+                            
+                            Text("Renews every 1 month")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            
+                            Text("\(monthlyProduct.displayPrice)/month")
                                 .font(.title2)
                                 .fontWeight(.bold)
                                 .foregroundColor(.primary)
@@ -75,10 +99,13 @@ struct SubscriptionView: View {
                 } else if storeKit.isLoading {
                     // Loading state
                     VStack(alignment: .center, spacing: 8) {
-                        Text("Subscribe Monthly")
-                            .font(.title2)
+                        Text("Pro Plan - Monthly")
+                            .font(.title3)
                             .fontWeight(.bold)
                             .foregroundColor(.primary)
+                        Text("Loading pricing...")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle())
                             .scaleEffect(0.8)
@@ -99,11 +126,11 @@ struct SubscriptionView: View {
                         }
                     }) {
                         VStack(alignment: .center, spacing: 8) {
-                            Text("Subscribe Monthly")
-                                .font(.title2)
+                            Text("Pro Plan - Monthly")
+                                .font(.title3)
                                 .fontWeight(.bold)
                                 .foregroundColor(.primary)
-                            Text("Tap to reload")
+                            Text("Tap to reload pricing")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         }
@@ -144,6 +171,33 @@ struct SubscriptionView: View {
                     .foregroundColor(Color(red: 0.53, green: 0.81, blue: 0.92))
                     .disabled(storeKit.isLoading)
                 }
+                
+                VStack(spacing: 8) {
+                    HStack(spacing: 16) {
+                        Button("Terms of Use") {
+                            showingTerms = true
+                        }
+                        .font(.caption)
+                        .foregroundColor(Color(red: 0.53, green: 0.81, blue: 0.92))
+                        
+                        Text("•")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Button("Privacy Policy") {
+                            showingPrivacy = true
+                        }
+                        .font(.caption)
+                        .foregroundColor(Color(red: 0.53, green: 0.81, blue: 0.92))
+                    }
+                    
+                    Text("Subscription automatically renews unless auto-renew is turned off at least 24 hours before the end of the current period.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 8)
+                }
+                .padding(.top, 8)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 40)
@@ -151,6 +205,18 @@ struct SubscriptionView: View {
         }
         .task {
             await storeKit.loadProducts()
+        }
+        .sheet(isPresented: $showingTerms) {
+            TermsPrivacyView(
+                title: "Terms of Use",
+                url: URL(string: "https://v0-new-project-xup9pufctgc.vercel.app/terms")!
+            )
+        }
+        .sheet(isPresented: $showingPrivacy) {
+            TermsPrivacyView(
+                title: "Privacy Policy",
+                url: URL(string: "https://v0-new-project-xup9pufctgc.vercel.app/privacy")!
+            )
         }
     }
     

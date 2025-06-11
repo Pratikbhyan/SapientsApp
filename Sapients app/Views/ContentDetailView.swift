@@ -10,12 +10,6 @@ struct ContentDetailView: View {
     @EnvironmentObject private var miniState: MiniPlayerState
     @StateObject private var subscriptionService = SubscriptionService.shared
 
-    init(content: Content, repository: ContentRepository) {
-        self.content = content
-        self.repository = repository
-        print("[DIAG] ContentDetailView init: Title - \(content.title)")
-    }
-    
     @State private var showPlayer = false
     @State private var isLoadingTranscription: Bool = false
     @State private var showSubscriptionSheet = false
@@ -40,7 +34,6 @@ struct ContentDetailView: View {
                     audioPlayer: audioPlayer,
                     showPlayer: $showPlayer,
                     onPlayTapped: {
-                        // Check subscription before playing
                         if isContentFree {
                             Task {
                                 await playContent()
@@ -266,11 +259,22 @@ struct InitialView: View {
                                     HStack {
                                         let isCurrentlyPlaying = audioPlayer.currentContent?.id == content.id && audioPlayer.isPlaying
                                         let isCurrentButPaused = audioPlayer.currentContent?.id == content.id && !audioPlayer.isPlaying
+                                        let isBuffering = audioPlayer.isBuffering && audioPlayer.currentContent?.id == content.id
                                         
-                                        Image(systemName: isCurrentlyPlaying ? "pause.fill" : "play.fill")
+                                        Group {
+                                            if isBuffering {
+                                                ProgressView()
+                                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                                    .scaleEffect(1.0)
+                                            } else {
+                                                Image(systemName: isCurrentlyPlaying ? "pause.fill" : "play.fill")
+                                            }
+                                        }
                                         
                                         Text({
-                                            if isCurrentlyPlaying {
+                                            if isBuffering {
+                                                return "Loading..."
+                                            } else if isCurrentlyPlaying {
                                                 return "Pause Episode"
                                             } else if isCurrentButPaused {
                                                 return "Resume Episode"
@@ -290,6 +294,7 @@ struct InitialView: View {
                                             .stroke(Color.white.opacity(0.5), lineWidth: 1)
                                     )
                                 }
+                                .disabled(audioPlayer.isBuffering && audioPlayer.currentContent?.id == content.id)
                             }
                         }
                         .padding(.bottom, bottomSafeArea + (screenHeight * playButtonBottomPercentage))

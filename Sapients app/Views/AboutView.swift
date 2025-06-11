@@ -22,7 +22,7 @@ struct AboutView: View {
                 VStack(alignment: .leading, spacing: 15) {
                     // App Info Section
                     VStack(spacing: 12) {
-                        Image("AppIcon") // Your app icon
+                        Image("p_primary") // This should match your primary app icon preview image
                             .resizable()
                             .frame(width: 80, height: 80)
                             .clipShape(RoundedRectangle(cornerRadius: 16))

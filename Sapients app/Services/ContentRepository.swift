@@ -134,30 +134,36 @@ class ContentRepository: ObservableObject {
             // Get current date and time in user's timezone
             let now = Date()
             let calendar = Calendar.current
-            let today = calendar.startOfDay(for: now)
             
-            // Create 5 AM today in user's timezone
+            let today = calendar.startOfDay(for: now)
             let fiveAMToday = calendar.date(bySettingHour: 5, minute: 0, second: 0, of: today)!
+            
+            print(" Current time: \(now)")
+            print(" 5 AM today: \(fiveAMToday)")
+            print(" Is past 5 AM today: \(now >= fiveAMToday)")
             
             // Format dates for Supabase query (ISO 8601 format with timezone)
             let formatter = ISO8601DateFormatter()
             
-            // If it's past 5 AM today, show today's content
-            // If it's before 5 AM today, show yesterday's content (if any)
+            // Determine which day's content to show based on 5 AM rule
             let targetDate: Date
             if now >= fiveAMToday {
-                // After 5 AM - show today's content
+                // After 5 AM today - show today's content (if available)
                 targetDate = today
+                print(" Looking for content published on: \(today) (today)")
             } else {
-                // Before 5 AM - show yesterday's content
+                // Before 5 AM today - show yesterday's content
                 targetDate = calendar.date(byAdding: .day, value: -1, to: today)!
+                print(" Looking for content published on: \(targetDate) (yesterday, since before 5 AM)")
             }
             
-            let startOfDay = calendar.startOfDay(for: targetDate)
-            let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+            let startOfTargetDay = calendar.startOfDay(for: targetDate)
+            let endOfTargetDay = calendar.date(byAdding: .day, value: 1, to: startOfTargetDay)!
             
-            let startString = formatter.string(from: startOfDay)
-            let endString = formatter.string(from: endOfDay)
+            let startString = formatter.string(from: startOfTargetDay)
+            let endString = formatter.string(from: endOfTargetDay)
+            
+            print(" Searching for content between: \(startString) and \(endString)")
             
             // First try to get content scheduled for the target date
             var response: [Content] = try await supabase
@@ -170,23 +176,49 @@ class ContentRepository: ObservableObject {
                 .execute()
                 .value
             
+            print(" Found \(response.count) content items for target date")
+            
             // If no content scheduled for target date, get the latest available content
-            // that was published before the current 5 AM threshold
+            // that was published before now (respecting the 5 AM rule)
             if response.isEmpty {
-                let availableUntil = formatter.string(from: fiveAMToday)
+                print(" No content for target date, looking for latest available content...")
+                
+                // For fallback, use either yesterday's end (if before 5 AM) or today's 5 AM (if after 5 AM)
+                let availableUntil: Date
+                if now >= fiveAMToday {
+                    // After 5 AM - can show content up to now
+                    availableUntil = now
+                } else {
+                    // Before 5 AM - can only show content up to yesterday's end
+                    availableUntil = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: calendar.date(byAdding: .day, value: -1, to: today)!)!
+                }
+                
+                let availableUntilString = formatter.string(from: availableUntil)
+                print(" Fallback: Looking for content published before: \(availableUntilString)")
+                
                 response = try await supabase
                     .from("content")
                     .select("id, title, description, audio_url, image_url, created_at, publish_on, transcription_url")
-                    .or("publish_on.lte.\(availableUntil),publish_on.is.null")
+                    .or("publish_on.lte.\(availableUntilString),publish_on.is.null")
                     .order("created_at", ascending: false)
                     .limit(1)
                     .execute()
                     .value
+                
+                print(" Found \(response.count) fallback content items")
             }
 
             self.isLoading = false
+            
+            if let content = response.first {
+                print(" Returning content: \(content.title) (published: \(content.publishOn?.description ?? "nil"))")
+            } else {
+                print(" No content found")
+            }
+            
             return response.first
         } catch {
+            print(" Error fetching daily content: \(error)")
             self.error = error
             self.isLoading = false
             throw error

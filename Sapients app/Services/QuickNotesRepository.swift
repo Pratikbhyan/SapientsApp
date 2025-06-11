@@ -1,24 +1,18 @@
 import Foundation
-import Combine // For ObservableObject
+import Combine
 
-// Assuming NoteSection struct is accessible (e.g., defined globally, in its own file, or publicly in QuickNotesView.swift)
-// If not, its definition might need to be moved here or made more accessible.
-// For reference, from QuickNotesView.swift:
-// struct NoteSection: Codable, Identifiable {
-//     var id = UUID()
-//     var date: Date
-//     var content: String
-// }
-
+@MainActor
 class QuickNotesRepository: ObservableObject {
     static let shared = QuickNotesRepository()
 
     @Published var noteSections: [NoteSection] = []
+    @Published var isLoading = false
 
+    private let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
     private let noteSectionsFileName = "noteSections.json"
+
     private var noteSectionsFileURL: URL {
-        let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        return documentsDirectory.appendingPathComponent(noteSectionsFileName)
+        documentsDirectory.appendingPathComponent(noteSectionsFileName)
     }
 
     private init() {
@@ -49,9 +43,9 @@ class QuickNotesRepository: ObservableObject {
     }
 
     private func saveNoteSections() {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
         do {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
             let data = try encoder.encode(noteSections)
             try data.write(to: noteSectionsFileURL, options: [.atomicWrite])
             print("QuickNotesRepository: Note sections saved successfully. Count: \(noteSections.count)")
@@ -66,9 +60,9 @@ class QuickNotesRepository: ObservableObject {
             return
         }
 
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
         do {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
             let data = try Data(contentsOf: noteSectionsFileURL)
             // Ensure that we decode into [NoteSection]
             let loadedSections = try decoder.decode([NoteSection].self, from: data)

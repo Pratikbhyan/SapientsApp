@@ -6,6 +6,7 @@ struct QuickNotesView: View {
     @State private var noteSections: [NoteSection] = []
     @State private var isEditing: Bool = false
     @FocusState private var isTextEditorFocused: Bool
+    @FocusState private var focusedSectionID: UUID?
     @State private var selectedSectionForDeletion: NoteSection?
     @State private var showingDeleteConfirmation: Bool = false
     @State private var hasInitialized: Bool = false // Prevent duplicate initialization
@@ -30,12 +31,13 @@ struct QuickNotesView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Dismiss keyboard button
             HStack {
                 Button(action: {
-                    isTextEditorFocused = false // Dismiss the keyboard
+                    isTextEditorFocused = false
+                    focusedSectionID = nil
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 }) {
-                    Image(systemName: "chevron.down") // Changed icon
+                    Image(systemName: "chevron.down")
                         .font(.title2)
                         .fontWeight(.semibold)
                         .foregroundColor(skyBlue)
@@ -44,7 +46,6 @@ struct QuickNotesView: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 10)
-            // Centered header with colored title
             VStack(spacing: 8) {
                 Text("Quick Notes")
                     .font(.largeTitle)
@@ -61,21 +62,24 @@ struct QuickNotesView: View {
             .padding(.top, 0)
             .padding(.bottom, 15)
             
-            // Main content area
             ScrollViewReader { proxy in
                 GeometryReader { geometry in
                     ScrollView {
                         LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                            // Previous notes sections (sorted chronologically - newest first)
-                            ForEach($noteSections.sorted(by: { $0.date.wrappedValue > $1.date.wrappedValue })) { $section in
+                            ForEach($noteSections.sorted(by: { $0.date.wrappedValue < $1.date.wrappedValue })) { $section in
                                 Section {
                                     VStack(alignment: .leading, spacing: 12) {
                                         TextEditor(text: $section.content)
                                             .frame(minHeight: 50)
                                             .padding(.horizontal, 20)
                                             .padding(.vertical, 10)
+                                            .focused($focusedSectionID, equals: section.id)
                                             .onChange(of: section.content) {
                                                 saveNoteSections()
+                                            }
+                                            .onTapGesture {
+                                                focusedSectionID = section.id
+                                                isTextEditorFocused = false
                                             }
                                     }
                                     .background(Color(UIColor.secondarySystemBackground).opacity(0.5))
@@ -98,19 +102,17 @@ struct QuickNotesView: View {
                                 }
                             }
                             
-                            // Today's section
                             Section {
                                 ZStack(alignment: .topLeading) {
                                     TextEditor(text: $noteText)
                                         .frame(minHeight: 200, maxHeight: .infinity)
                                         .padding(.horizontal, 20)
-                                        .padding(.bottom, 20) // Fixed padding
+                                        .padding(.bottom, 20)
                                         .focused($isTextEditorFocused)
                                         .onChange(of: noteText) {
                                             isEditing = true
                                             saveTodaysNote()
                                             
-                                            // Only auto-scroll if content might be hidden behind keyboard
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                                 if shouldScrollToBottom(availableHeight: geometry.size.height) {
                                                     withAnimation(.easeOut(duration: 0.3)) {
@@ -121,9 +123,10 @@ struct QuickNotesView: View {
                                         }
                                         .onTapGesture {
                                             isEditing = true
+                                            isTextEditorFocused = true
+                                            focusedSectionID = nil
                                         }
                                     
-                                    // Invisible anchor point at the bottom of the text editor
                                     VStack {
                                         Spacer()
                                         HStack {
@@ -142,7 +145,6 @@ struct QuickNotesView: View {
                                         .foregroundColor(.gray)
                                     Spacer()
                                     
-                                    // Clear button for today's notes
                                     if !noteText.isEmpty {
                                         Button(action: clearTodaysNotes) {
                                             Image(systemName: "trash")
@@ -172,12 +174,11 @@ struct QuickNotesView: View {
                     .onAppear {
                         scrollViewFrameHeight = geometry.size.height
                         initializeNotesIfNeeded()
-                        // Scroll to today's section after a brief delay
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             withAnimation(.easeInOut) {
                                 proxy.scrollTo("today", anchor: .top)
                             }
-                            isTextEditorFocused = true // Directly set focus as in the 'good' version
+                            isTextEditorFocused = true
                         }
                     }
                     .onChange(of: geometry.size.height) { _, newHeight in
@@ -185,8 +186,8 @@ struct QuickNotesView: View {
                     }
                     .onChange(of: isTextEditorFocused) { _, newFocusedState in
                         if newFocusedState {
-                            // When text editor gains focus, only scroll if needed
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { // Ensure keyboard height is updated
+                            focusedSectionID = nil
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                 if shouldScrollToBottom(availableHeight: geometry.size.height) {
                                     withAnimation(.easeOut(duration: 0.3)) {
                                         proxy.scrollTo("today-bottom", anchor: .bottom)
@@ -195,9 +196,13 @@ struct QuickNotesView: View {
                             }
                         }
                     }
+                    .onChange(of: focusedSectionID) { _, newFocusedID in
+                        if newFocusedID != nil {
+                            isTextEditorFocused = false
+                        }
+                    }
                     .onChange(of: keyboardHeight) { _, newKeyboardHeight in
-                        // When keyboard appears/disappears, only scroll if content would be hidden
-                        if newKeyboardHeight > 0 && isTextEditorFocused {
+                        if newKeyboardHeight > 0 && (isTextEditorFocused || focusedSectionID != nil) {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                 if shouldScrollToBottom(availableHeight: geometry.size.height) {
                                     withAnimation(.easeOut(duration: 0.3)) {
@@ -208,8 +213,7 @@ struct QuickNotesView: View {
                         }
                     }
                     .onChange(of: miniPlayerState.isVisible) { _, isVisible in
-                        // Only scroll when mini player appears and text would be hidden
-                        if isVisible && isTextEditorFocused {
+                        if isVisible && (isTextEditorFocused || focusedSectionID != nil) {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                                 if shouldScrollToBottom(availableHeight: geometry.size.height) {
                                     withAnimation(.easeOut(duration: 0.3)) {
@@ -225,8 +229,8 @@ struct QuickNotesView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
             if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
                 withAnimation(.easeOut(duration: 0.3)) {
-                    self.keyboardHeight = keyboardFrame.height // Local state for scrolling
-                    miniPlayerState.keyboardHeight = keyboardFrame.height // For MiniPlayerState if it needs it
+                    self.keyboardHeight = keyboardFrame.height
+                    miniPlayerState.keyboardHeight = keyboardFrame.height
                     if miniPlayerState.isVisible {
                         miniPlayerState.isVisible = false
                         self.quickNotesHidMiniPlayer = true
@@ -236,8 +240,8 @@ struct QuickNotesView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             withAnimation(.easeOut(duration: 0.3)) {
-                self.keyboardHeight = 0 // Local state for scrolling
-                miniPlayerState.keyboardHeight = 0 // For MiniPlayerState
+                self.keyboardHeight = 0
+                miniPlayerState.keyboardHeight = 0
                 if self.quickNotesHidMiniPlayer {
                     miniPlayerState.isVisible = true
                     self.quickNotesHidMiniPlayer = false
@@ -246,17 +250,14 @@ struct QuickNotesView: View {
         }
         .onDisappear {
             saveNoteSections()
-            // If QuickNotesView hid the miniplayer and is now disappearing,
-            // try to restore miniplayer visibility and reset keyboard height.
             if self.quickNotesHidMiniPlayer {
                 miniPlayerState.isVisible = true
                 self.quickNotesHidMiniPlayer = false
             }
-            if miniPlayerState.keyboardHeight > 0 && keyboardHeight > 0 { // If this view's keyboard was up
+            if miniPlayerState.keyboardHeight > 0 && keyboardHeight > 0 {
                 miniPlayerState.keyboardHeight = 0
             }
         }
-        // Mini-player overlay moved to ContentView.swift
         .alert(isPresented: $showingDeleteConfirmation) {
             Alert(
                 title: Text("Delete Notes"),
@@ -273,27 +274,15 @@ struct QuickNotesView: View {
         }
     }
     
-    // MARK: - Smart Scrolling Function
-
     private func shouldScrollToBottom(availableHeight: CGFloat) -> Bool {
-        // Only consider scrolling if the text editor for today's note is focused
-        // and the keyboard is actually visible.
-        guard isTextEditorFocused && keyboardHeight > 0 else {
+        guard (isTextEditorFocused || focusedSectionID != nil) && keyboardHeight > 0 else {
             return false
         }
 
-        // Calculate the height of the visible area within the ScrollView
-        // after accounting for the keyboard.
         let visibleAreaHeight = availableHeight - keyboardHeight
 
-        // If the total content height within the ScrollView is greater than
-        // this calculated visible area height, it means some part of the content
-        // (potentially the bottom of the "Today" TextEditor where the user is typing)
-        // might be obscured or pushed off-screen. In such cases, scrolling is needed.
         return scrollViewContentHeight > visibleAreaHeight
     }
-    
-    // MARK: - Initialization
     
     private func initializeNotesIfNeeded() {
         guard !hasInitialized else { return }
@@ -303,8 +292,6 @@ struct QuickNotesView: View {
         checkForNewDay()
     }
     
-    // MARK: - Actions
-
     private func deleteNotes(for section: NoteSection) {
         if let index = noteSections.firstIndex(where: { $0.id == section.id }) {
             noteSections.remove(at: index)
@@ -322,7 +309,7 @@ struct QuickNotesView: View {
     }
     
     private func saveTodaysNote() {
-        let currentNoteText = self.noteText // Capture value for the background task
+        let currentNoteText = self.noteText
         DispatchQueue.global(qos: .background).async {
             UserDefaults.standard.set(currentNoteText, forKey: "todayNoteText")
         }
@@ -338,25 +325,20 @@ struct QuickNotesView: View {
         let previousDayNote = UserDefaults.standard.string(forKey: "todayNoteText") ?? ""
         
         if !calendar.isDate(today, inSameDayAs: lastActiveDate) && !previousDayNote.isEmpty {
-            // It's a new day and there was a note from the previous active day
             let newSection = NoteSection(date: lastActiveDate, content: previousDayNote)
             
-            // Check if this section already exists to prevent duplicates
             if !noteSections.contains(where: { Calendar.current.isDate($0.date, inSameDayAs: lastActiveDate) }) {
                 noteSections.append(newSection)
                 saveNoteSections()
                 print("Archived note from \(formatDate(lastActiveDate)) to sections.")
             }
             
-            // Clear the old "today's note" as it's now archived
             noteText = ""
             UserDefaults.standard.removeObject(forKey: "todayNoteText")
         } else {
-            // Same day or no previous note to archive, just load current noteText
             noteText = previousDayNote
         }
         
-        // Update the last active date to today
         UserDefaults.standard.set(today.timeIntervalSince1970, forKey: lastActiveNoteDateKey)
     }
     
@@ -365,8 +347,6 @@ struct QuickNotesView: View {
         formatter.dateStyle = .full
         return formatter.string(from: date)
     }
-    
-    // MARK: - Data Persistence for NoteSections
     
     private var noteSectionsFileURL: URL {
         let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
@@ -403,8 +383,6 @@ struct QuickNotesView: View {
         }
     }
 }
-
-// MARK: - Preview
 
 struct QuickNotesView_Previews: PreviewProvider {
     static var previews: some View {

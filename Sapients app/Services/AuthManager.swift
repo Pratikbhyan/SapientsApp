@@ -8,6 +8,7 @@ class AuthManager: ObservableObject {
 
     @Published var isAuthenticated = false
     @Published var user: User? // Supabase User model
+    @Published var isDeletingAccount = false
 
     private var authStateListenerTask: Task<Void, Never>?
     private var supabase: SupabaseClient {
@@ -42,6 +43,7 @@ class AuthManager: ObservableObject {
                     case .signedOut:
                         self.isAuthenticated = false
                         self.user = nil
+                        self.clearUserSession()
                         print("[AuthManager] User is SIGNED OUT.")
                     case .passwordRecovery:
                         // Handle password recovery if needed, for now, doesn't change isAuthenticated
@@ -69,12 +71,20 @@ class AuthManager: ObservableObject {
                         } else if state.event == .signedOut { // Ensure signedOut is definitely handled if it falls here
                              self.isAuthenticated = false
                              self.user = nil
+                             self.clearUserSession()
                         }
                     }
                 }
             }
             print("[AuthManager] Auth state changes stream completed or broken.")
         }
+    }
+
+    private func clearUserSession() {
+        // Clear audio player (stop() method clears everything including currentContent)
+        AudioPlayerService.shared.stop()
+        
+        print("[AuthManager] Cleared user session data (audio player, mini-player)")
     }
 
     func checkInitialAuthState() {
@@ -105,19 +115,68 @@ class AuthManager: ObservableObject {
         }
     }
 
-    // Add other auth methods like signOut here if they should also update AuthManager's state
-    // For example, the signOut from AuthViewModel could call a method here or AuthManager could handle signOut directly.
-
     func signOut() async {
         do {
+            // Clear session data before signing out
+            clearUserSession()
+            
             try await supabase.auth.signOut()
-            // The authStateChanges listener in AuthManager should automatically update 
-            // isAuthenticated and user properties upon successful sign out.
             print("[AuthManager] signOut() called, Supabase signOut attempted.")
         } catch {
             print("[AuthManager] Error during signOut: \(error.localizedDescription)")
-            // Even if signOut fails, ensure UI reflects an attempt or error state if necessary.
-            // However, authStateChanges should ideally handle the state based on Supabase events.
+        }
+    }
+    
+    func deleteAccount() async throws {
+        guard let user = user else {
+            throw AuthError.userNotFound
+        }
+        
+        isDeletingAccount = true
+        
+        do {
+            // Call the database function to delete the user completely
+            let response: PostgrestResponse<[String: AnyJSON]> = try await supabase
+                .rpc("delete_user_account")
+                .execute()
+            
+            print("[AuthManager] delete_user_account function executed")
+            
+            // Clear session data
+            clearUserSession()
+            
+            // The user should be automatically signed out since they're deleted
+            // But let's ensure the local state is updated
+            self.isAuthenticated = false
+            self.user = nil
+            
+            print("[AuthManager] Account deleted successfully from Supabase")
+            
+        } catch {
+            print("[AuthManager] Error during account deletion: \(error.localizedDescription)")
+            
+            // Fallback: Just sign out the user if deletion fails
+            try await supabase.auth.signOut()
+            print("[AuthManager] Fallback: User signed out after deletion error")
+            
+            isDeletingAccount = false
+            throw AuthError.deletionFailed(error.localizedDescription)
+        }
+        
+        isDeletingAccount = false
+    }
+}
+
+enum AuthError: LocalizedError {
+    case userNotFound
+    case deletionFailed(String)
+    
+    var errorDescription: String? {
+        switch self {
+        case .userNotFound:
+            return "No authenticated user found"
+        case .deletionFailed(let message):
+            return "Account deletion failed: \(message)"
         }
     }
 }

@@ -14,6 +14,18 @@
 				<string>com.googleusercontent.apps.453563946840-cg1tu8jkc4uomltcqooc5adifkqg8f4i</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>SupabaseAuth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ryvgngwdmjmacefljhll</string>
+			</array>
+		</dict>
 	</array>
+	<key>GIDClientID</key>
+	<string>453563946840-cg1tu8jkc4uomltcqooc5adifkqg8f4i.apps.googleusercontent.com</string>
 </dict>
 </plist>

@@ -4,20 +4,16 @@ struct ContentListView: View {
     @StateObject private var repository = ContentRepository()
     @StateObject private var favoritesService = FavoritesService.shared
     @State private var presentingContentDetail: Content? = nil
-    @StateObject private var audioPlayer = AudioPlayerService.shared // Ensure access to the player
-    @EnvironmentObject var miniPlayerState: MiniPlayerState // Access to mini-player state
+    @StateObject private var audioPlayer = AudioPlayerService.shared
+    @EnvironmentObject var miniPlayerState: MiniPlayerState
     @StateObject private var subscriptionService = SubscriptionService.shared
-
-    init() {
-        print("[DIAG] ContentListView INIT")
-    }
     
     enum Tab {
         case library
         case favourites
     }
-    @State private var selectedTab: Tab = .library // Keep this for logic
-    @State private var selectedSegmentIndex: Int = 0 // 0 for Library, 1 for Favourites
+    @State private var selectedTab: Tab = .library
+    @State private var selectedSegmentIndex: Int = 0
 
     private var filteredContents: [Content] {
         let allContents = repository.contents
@@ -33,7 +29,7 @@ struct ContentListView: View {
         VStack(spacing: 0) {
             // Top Bar: Segmented Control and Settings Button
             HStack {
-                Spacer() // Pushes segmented control to center
+                Spacer()
                 StylishSegmentedControl(
                     selection: $selectedSegmentIndex,
                     items: [
@@ -41,17 +37,17 @@ struct ContentListView: View {
                         (icon: nil, title: "Favourites")
                     ]
                 )
-                .frame(maxWidth: UIScreen.main.bounds.width * 0.9) // Constrain width to allow centering
-                Spacer() // Pushes settings button to the right
+                .frame(maxWidth: UIScreen.main.bounds.width * 0.9)
+                Spacer()
                 NavigationLink(destination: SettingsView()) {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 22))
                         .foregroundColor(.accentColor)
                 }
             }
-            .padding(.horizontal) // Horizontal padding for the whole bar
-            .padding(.top, 8)     // Top padding for the bar
-            .padding(.bottom, 10) // Bottom padding after the bar
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .padding(.bottom, 10)
             .onChange(of: selectedSegmentIndex) { _, newIndex in
                 selectedTab = (newIndex == 0) ? .library : .favourites
             }
@@ -82,8 +78,8 @@ struct ContentListView: View {
                                 }) {
                                     ContentRowView(content: content, repository: repository)
                                 }
-                                .buttonStyle(PlainButtonStyle()) // To make the whole row tappable like a NavLink
-                                .id(content.id) // Keep for ScrollViewReader
+                                .buttonStyle(PlainButtonStyle())
+                                .id(content.id)
                             }
                             .refreshable {
                                 await repository.fetchAllContent()
@@ -100,10 +96,13 @@ struct ContentListView: View {
                                     }
                                 }
                             }
-                        } // End ScrollViewReader
+                        }
                     }
                 } else if selectedTab == .favourites {
-                    if filteredContents.isEmpty {
+                    if favoritesService.isLoading {
+                        ProgressView("Loading favorites...")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if filteredContents.isEmpty {
                         VStack {
                             Image(systemName: "heart.slash.fill")
                                 .font(.largeTitle)
@@ -129,36 +128,33 @@ struct ContentListView: View {
                         }
                     }
                 }
-            } // End Group
-            .listStyle(.plain) // Apply listStyle to the Group
+            }
+            .listStyle(.plain)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     var body: some View {
-        let _ = print("[DIAG] ContentListView BODY")
-        
-        listContent
-            .sheet(item: $presentingContentDetail) { contentToPresent in
-                ContentDetailView(content: contentToPresent, repository: repository)
-                    .environmentObject(audioPlayer)
-                    .environmentObject(miniPlayerState)
-                    .onDisappear {
-                        print("[DIAG] ContentDetailView via sheet DISMISSED")
-                        // Mini-player visibility is now handled globally by MiniPlayerState and Sapients_appApp
-                    }
+        NavigationView {
+            listContent
+                .navigationBarHidden(true)
+        }
+        .navigationViewStyle(StackNavigationViewStyle())
+        .sheet(item: $presentingContentDetail) { contentToPresent in
+            ContentDetailView(content: contentToPresent, repository: repository)
+                .environmentObject(audioPlayer)
+                .environmentObject(miniPlayerState)
+        }
+        .task {
+            if repository.contents.isEmpty {
+                 await repository.fetchAllContent()
             }
-            .task {
-                if repository.contents.isEmpty {
-                     await repository.fetchAllContent()
-                }
+        }
+        .onAppear {
+            Task {
+                await favoritesService.refreshFavorites()
             }
-            .onAppear {
-                print("[DIAG] ContentListView ON_APPEAR (listContent level)")
-            }
-            .onDisappear {
-                print("[DIAG] ContentListView ON_DISAPPEAR (listContent level)")
-            }
+        }
     }
 }
 
@@ -167,18 +163,15 @@ struct ContentRowView: View {
     @ObservedObject var repository: ContentRepository
     
     var body: some View {
-        let _ = print("[ContentRowView] Content ID: \(content.id), Title: \(content.title), Image URL String: \(content.imageUrl ?? "nil")") // DIAGNOSTIC
         HStack {
             if let imageUrlString = content.imageUrl,
                let imageURL = repository.getPublicURL(for: imageUrlString, bucket: "images") {
-                    let _ = print("[ContentRowView] Generated Public URL for \(imageUrlString): \(imageURL)") // DIAGNOSTIC
                 ZStack {
                     CachedAsyncImage(url: imageURL) {
-                        // This is the placeholder view from CachedAsyncImage
                         DefaultPlaceholder()
-                            .frame(width: 60, height: 60) // Apply frame to placeholder as well
+                            .frame(width: 60, height: 60)
                     }
-                    .aspectRatio(contentMode: .fill) // Apply to the image if loaded
+                    .aspectRatio(contentMode: .fill)
                     .frame(width: 60, height: 60)
                     .cornerRadius(8)
                     .clipped()
@@ -224,21 +217,19 @@ struct ContentRowView: View {
 #if DEBUG
 struct ContentListView_Previews: PreviewProvider {
     static var previews: some View {
-        NavigationView { // Add NavigationView here for preview to work correctly
+        NavigationView {
             ContentListView()
         }
     }
 }
 #endif
 
-// Definition for the StylishSegmentedControl
 fileprivate struct StylishSegmentedControlItem: Identifiable {
     let id = UUID()
     let icon: String?
     let title: String
 }
 
-// Updated StylishSegmentedControl with centered pill design
 fileprivate struct StylishSegmentedControl: View {
     @Binding var selection: Int
     let items: [StylishSegmentedControlItem]
@@ -273,21 +264,21 @@ fileprivate struct StylishSegmentedControl: View {
                         ZStack {
                             if selection == index {
                                 RoundedRectangle(cornerRadius: 20)
-                                    .fill(Color(red: 135/255.0, green: 206/255.0, blue: 235/255.0)) // Sky blueish color
+                                    .fill(Color(red: 135/255.0, green: 206/255.0, blue: 235/255.0))
                                     .matchedGeometryEffect(id: "selectedBackground", in: animation)
                             }
                         }
                     )
                 }
-                .buttonStyle(PlainButtonStyle()) // Remove default button styling
+                .buttonStyle(PlainButtonStyle())
             }
         }
-        .padding(4) // Padding inside the overall container
+        .padding(4)
         .background(
             RoundedRectangle(cornerRadius: 24)
                 .fill(Color(uiColor: .systemGray6))
                 .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
         )
-        .frame(maxWidth: 280) // Constrain width to center it better
+        .frame(maxWidth: 280)
     }
 }
