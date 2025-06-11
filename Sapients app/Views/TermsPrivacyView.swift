@@ -7,34 +7,14 @@ struct TermsPrivacyView: View {
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
-        ZStack {
-            SafariWebView(url: url)
-                .edgesIgnoringSafeArea(.all)
-            
-            // Custom overlay with done button
-            VStack {
-                HStack {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .padding()
-                    .background(Color.black.opacity(0.7))
-                    .foregroundColor(.white)
-                    .cornerRadius(20)
-                    .padding(.leading)
-                    
-                    Spacer()
-                }
-                .padding(.top, 50) // Account for safe area
-                
-                Spacer()
-            }
-        }
+        SafariWebView(url: url, dismiss: dismiss)
+            .edgesIgnoringSafeArea(.all)
     }
 }
 
 struct SafariWebView: UIViewControllerRepresentable {
     let url: URL
+    let dismiss: DismissAction
     
     func makeUIViewController(context: Context) -> SFSafariViewController {
         let config = SFSafariViewController.Configuration()
@@ -45,10 +25,28 @@ struct SafariWebView: UIViewControllerRepresentable {
         safari.preferredBarTintColor = UIColor.systemBackground
         safari.preferredControlTintColor = UIColor.label
         
+        safari.delegate = context.coordinator
+        
         return safari
     }
     
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {
         // No updates needed
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(dismiss: dismiss)
+    }
+    
+    class Coordinator: NSObject, SFSafariViewControllerDelegate {
+        let dismiss: DismissAction
+        
+        init(dismiss: DismissAction) {
+            self.dismiss = dismiss
+        }
+        
+        func safariViewControllerDidFinish(_ controller: SFSafariViewController) {
+            dismiss()
+        }
     }
 }

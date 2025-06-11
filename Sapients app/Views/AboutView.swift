@@ -108,7 +108,7 @@ struct AboutView: View {
         .sheet(isPresented: $showingTerms) {
             TermsPrivacyView(
                 title: "Terms of Use",
-                url: URL(string: "https://v0-new-project-xup9pufctgc.vercel.app/terms")!
+                url: URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
             )
         }
         .sheet(isPresented: $showingPrivacy) {
