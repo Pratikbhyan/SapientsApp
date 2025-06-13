@@ -2,7 +2,6 @@ import SwiftUI
 import AVFoundation
 import UIKit
 
-
 enum FontSizePreset: CaseIterable, Identifiable {
     case small, medium, large
 
@@ -11,7 +10,7 @@ enum FontSizePreset: CaseIterable, Identifiable {
     var size: CGFloat {
         switch self {
         case .small: return 18
-        case .medium: return 20 
+        case .medium: return 20
         case .large: return 23
         }
     }
@@ -25,19 +24,24 @@ enum FontSizePreset: CaseIterable, Identifiable {
 }
 
 struct PlayingView: View {
-    let content: Content 
+    let content: Content
     @ObservedObject var repository: ContentRepository
     @ObservedObject var audioPlayer: AudioPlayerService
-    @EnvironmentObject var miniPlayerState: MiniPlayerState 
+    @EnvironmentObject var miniPlayerState: MiniPlayerState
     @Binding var isLoadingTranscription: Bool
     var onDismissTapped: () -> Void
     
-    @State private var currentFontSizePreset: FontSizePreset = .medium 
+    // UI State
+    @State private var currentFontSizePreset: FontSizePreset = .medium
     @State private var dragOffset: CGFloat = 0
     @State private var showAddNoteDialog = false
     @State private var tappedTranscriptionText = ""
     @State private var isSeekingFromTap = false
 
+    // NEW: throttle auto‑scrolls to reduce "twitching"
+    @State private var lastAutoScrollIndex: Int? = nil
+
+    // Constants
     private let fadeOutHeight: CGFloat = 40
     private let dismissThreshold: CGFloat = 100
     private let availableRates: [Float] = [0.75, 1.0, 1.25, 1.5, 2.0]
@@ -46,11 +50,11 @@ struct PlayingView: View {
         VStack(spacing: 0) {
             topBar
             transcriptionArea
-            DetailedAudioControls(content: content, audioPlayer: audioPlayer) 
+            DetailedAudioControls(content: content, audioPlayer: audioPlayer)
                 .padding(.horizontal, 20)
                 .padding(.bottom, safeAreaInsets.bottom == 0 ? 8 : safeAreaInsets.bottom)
         }
-        .frame(maxWidth: .infinity) 
+        .frame(maxWidth: .infinity)
         .foregroundColor(.white)
         .offset(y: dragOffset)
         .background(Color.clear)
@@ -75,7 +79,7 @@ struct PlayingView: View {
         )
         .confirmationDialog("Add to Highlights?", isPresented: $showAddNoteDialog, titleVisibility: .visible) {
             Button("Add") {
-                HighlightRepository.shared.add(tappedTranscriptionText, to: content.title)
+                HighlightRepository.shared.add(tappedTranscriptionText, to: content.title, contentId: content.id)
             }
             Button("Cancel", role: .cancel) { }
         }
@@ -87,11 +91,11 @@ struct PlayingView: View {
         }
         .toolbar(.hidden, for: .tabBar)
         .ignoresSafeArea()
-        .onAppear { 
-            adjustMiniPlayerVisibility(isAppearing: true) 
+        .onAppear {
+            adjustMiniPlayerVisibility(isAppearing: true)
         }
-        .onDisappear { 
-            adjustMiniPlayerVisibility(isAppearing: false) 
+        .onDisappear {
+            adjustMiniPlayerVisibility(isAppearing: false)
         }
     }
 }
@@ -130,13 +134,13 @@ private extension PlayingView {
             }
         }
         .padding(.horizontal, 20)
-        .padding(.top, safeAreaInsets.top == 0 ? 15 : safeAreaInsets.top)
-        .padding(.bottom, 8)
+        .padding(.top, safeAreaInsets.top == 0 ? 5 : safeAreaInsets.top)
+        .padding(.bottom, 6)
     }
 
     var transcriptionArea: some View {
         Group {
-            if isLoadingTranscription && repository.transcriptions.isEmpty { 
+            if isLoadingTranscription && repository.transcriptions.isEmpty {
                 ProgressView("Loading Transcription…")
                     .progressViewStyle(CircularProgressViewStyle(tint: .white))
                     .foregroundColor(.white.opacity(0.8))
@@ -156,8 +160,8 @@ private extension PlayingView {
                                 let transcription = repository.transcriptions[index]
                                 transcriptionTile(for: transcription, index: index, proxy: proxy)
                                 if index < repository.transcriptions.count - 1 {
-                                    Text(" ") 
-                                        .font(.system(size: currentFontSizePreset.size * 0.6)) 
+                                    Text(" ")
+                                        .font(.system(size: currentFontSizePreset.size * 0.6))
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                             }
@@ -177,19 +181,22 @@ private extension PlayingView {
                         }
                     )
                     .onChange(of: audioPlayer.currentTranscriptionIndex) { _, newValue in
-                        guard !isSeekingFromTap else { return } 
+                        guard !isSeekingFromTap else { return }
                         if newValue >= 0 && newValue < repository.transcriptions.count {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                proxy.scrollTo(newValue, anchor: .center)
+                            if lastAutoScrollIndex == nil || abs(newValue - (lastAutoScrollIndex ?? 0)) > 1 {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    proxy.scrollTo(newValue, anchor: .center)
+                                }
+                                lastAutoScrollIndex = newValue
                             }
                         }
                     }
                 }
                 .layoutPriority(1)
-                .padding(.horizontal, 20) 
+                .padding(.horizontal, 20)
             }
         }
-        .layoutPriority(1) 
+        .layoutPriority(1)
     }
 
     @ViewBuilder
@@ -199,20 +206,20 @@ private extension PlayingView {
         let fontSize = isHighlighted ? baseFont * 1.4 : baseFont
 
         Text(transcription.text)
-            .fontWeight(isHighlighted ? .bold : .regular)  
+            .fontWeight(isHighlighted ? .bold : .regular)
             .font(.system(size: fontSize))
-            .foregroundColor(isHighlighted ? .white.opacity(0.95) : .white.opacity(0.7)) 
-            .lineSpacing(isHighlighted ? 8 : 6) 
+            .foregroundColor(isHighlighted ? .white.opacity(0.95) : .white.opacity(0.7))
+            .lineSpacing(isHighlighted ? 8 : 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .id(index)
-            .onTapGesture { 
+            .onTapGesture {
                 isSeekingFromTap = true
                 audioPlayer.seek(to: TimeInterval(transcription.startTime))
-                audioPlayer.currentTranscriptionIndex = index 
-                if !audioPlayer.isPlaying { 
-                    audioPlayer.play() 
+                audioPlayer.currentTranscriptionIndex = index
+                if !audioPlayer.isPlaying {
+                    audioPlayer.play()
                 }
                 withAnimation(.easeInOut(duration: 0.25)) {
                     proxy.scrollTo(index, anchor: .center)
@@ -242,17 +249,17 @@ private extension PlayingView {
     var viewDragGesture: some Gesture {
         DragGesture(coordinateSpace: .global)
             .onChanged { value in
-                if value.translation.height > 0 { 
+                if value.translation.height > 0 {
                     dragOffset = value.translation.height
                 }
             }
             .onEnded { value in
                 if value.translation.height > dismissThreshold {
-                    withAnimation(.spring()) { 
+                    withAnimation(.spring()) {
                         onDismissTapped()
                     }
                 } else {
-                    withAnimation(.spring()) { 
+                    withAnimation(.spring()) {
                         dragOffset = 0
                     }
                 }
@@ -283,7 +290,7 @@ private extension PlayingView {
 }
 
 struct DetailedAudioControls: View {
-    let content: Content 
+    let content: Content
     @ObservedObject var audioPlayer: AudioPlayerService
 
     @State private var sliderValue: Double = 0
@@ -291,7 +298,7 @@ struct DetailedAudioControls: View {
     @State private var justSeeked: Bool = false
 
     var body: some View {
-        VStack(spacing: 10) { 
+        VStack(spacing: 10) {
             Slider(
                 value: $sliderValue,
                 in: 0...max(audioPlayer.duration, 1),
@@ -308,7 +315,7 @@ struct DetailedAudioControls: View {
                 sliderValue = audioPlayer.currentTime
             }
             
-            HStack { 
+            HStack {
                 Text(formatTime(sliderValue))
                 Spacer()
                 Text(formatTime(audioPlayer.duration))
@@ -317,7 +324,7 @@ struct DetailedAudioControls: View {
             .foregroundColor(.white.opacity(0.7))
             
             HStack {
-                Spacer() 
+                Spacer()
                 HStack(spacing: 40) {
                     Button(action: { audioPlayer.seek(to: max(0, audioPlayer.currentTime - 10)) }) {
                         Image(systemName: "gobackward.10")
@@ -344,15 +351,15 @@ struct DetailedAudioControls: View {
                         Image(systemName: "goforward.10")
                             .font(.title2)
                     }
-                } 
+                }
 
-                Spacer() 
-            } 
-            .foregroundColor(.white.opacity(0.9)) 
-        } 
+                Spacer()
+            }
+            .foregroundColor(.white.opacity(0.9))
+        }
         .padding(.top, 20)
         .padding(.bottom, 5)
-    } 
+    }
     
     private func sliderEditingChanged(_ editing: Bool) {
         if editing {
@@ -369,8 +376,8 @@ struct DetailedAudioControls: View {
     }
 
     private func togglePlayPause() {
-        if !audioPlayer.isBuffering { 
-            audioPlayer.togglePlayPause() 
+        if !audioPlayer.isBuffering {
+            audioPlayer.togglePlayPause()
         }
     }
 
