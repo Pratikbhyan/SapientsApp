@@ -11,7 +11,7 @@ struct MiniPlayerView: View {
     private let dismissThreshold: CGFloat = 50 // How far user needs to drag to dismiss
 
     var body: some View {
-        if miniState.isVisible && audioPlayer.currentContent != nil && !keyboardVisible {
+        if miniState.isVisible && audioPlayer.currentContent != nil {
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
                     // Artwork

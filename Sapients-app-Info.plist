@@ -15,12 +15,11 @@
 			</array>
 		</dict>
 	</array>
+	<key>SKAdNetworkItems</key>
+	<array/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
 	</array>
-	<!-- ADD: In-App Purchase capability -->
-	<key>SKAdNetworkItems</key>
-	<array/>
 </dict>
 </plist>

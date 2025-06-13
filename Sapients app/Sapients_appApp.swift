@@ -84,15 +84,40 @@ struct Sapients_appApp: App {
                         Label("Highlights", systemImage: "highlighter")
                     }
             }
+            .tint(.accentColor)
+            .onAppear {
+                // Configure translucent tab bar appearance
+                let tabBarAppearance = UITabBarAppearance()
+                tabBarAppearance.configureWithTransparentBackground()
+                
+                // Make background more translucent
+                tabBarAppearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterialDark)
+                tabBarAppearance.backgroundColor = UIColor.black.withAlphaComponent(0.1)
+                
+                // Configure colors - white for selected, gray for normal
+                tabBarAppearance.stackedLayoutAppearance.normal.iconColor = UIColor.secondaryLabel
+                tabBarAppearance.stackedLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor.secondaryLabel]
+                tabBarAppearance.stackedLayoutAppearance.selected.iconColor = UIColor.white
+                tabBarAppearance.stackedLayoutAppearance.selected.titleTextAttributes = [.foregroundColor: UIColor.white]
+                
+                // Also configure compact layout for smaller devices
+                tabBarAppearance.compactInlineLayoutAppearance.normal.iconColor = UIColor.secondaryLabel
+                tabBarAppearance.compactInlineLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor.secondaryLabel]
+                tabBarAppearance.compactInlineLayoutAppearance.selected.iconColor = UIColor.white
+                tabBarAppearance.compactInlineLayoutAppearance.selected.titleTextAttributes = [.foregroundColor: UIColor.white]
+                
+                // Apply the same appearance to both standard and scrollEdge
+                UITabBar.appearance().standardAppearance = tabBarAppearance
+                UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
+                
+                forceDarkMode()
+            }
             .onChange(of: selectedTab) { _, newTab in
                 if newTab == .nowPlaying {
                     miniPlayerState.isVisible = false
                 } else {
                     miniPlayerState.isVisible = audioPlayer.hasLoadedTrack
                 }
-            }
-            .onAppear {
-                forceDarkMode()
             }
         } else {
             LoginView()
