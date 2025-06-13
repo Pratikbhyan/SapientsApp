@@ -179,33 +179,24 @@ class ContentRepository: ObservableObject {
             print(" Found \(response.count) content items for target date")
             
             // If no content scheduled for target date, get the latest available content
-            // that was published before now (respecting the 5 AM rule)
+            // that was published before the current effective time (respecting the 5 AM rule)
             if response.isEmpty {
-                print(" No content for target date, looking for latest available content...")
+                print("📅 No content for target date, looking for latest available content...")
                 
-                // For fallback, use either yesterday's end (if before 5 AM) or today's 5 AM (if after 5 AM)
-                let availableUntil: Date
-                if now >= fiveAMToday {
-                    // After 5 AM - can show content up to now
-                    availableUntil = now
-                } else {
-                    // Before 5 AM - can only show content up to yesterday's end
-                    availableUntil = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: calendar.date(byAdding: .day, value: -1, to: today)!)!
-                }
-                
-                let availableUntilString = formatter.string(from: availableUntil)
-                print(" Fallback: Looking for content published before: \(availableUntilString)")
+                // FIXED: Use the same logic as Library view - only show content that should be available now
+                let nowString = formatter.string(from: now)
+                print("📅 Fallback: Looking for content published before: \(nowString)")
                 
                 response = try await supabase
                     .from("content")
                     .select("id, title, description, audio_url, image_url, created_at, publish_on, transcription_url")
-                    .or("publish_on.lte.\(availableUntilString),publish_on.is.null")
+                    .or("publish_on.lte.\(nowString),publish_on.is.null") // Same filter as Library view
                     .order("created_at", ascending: false)
                     .limit(1)
                     .execute()
                     .value
                 
-                print(" Found \(response.count) fallback content items")
+                print("📅 Found \(response.count) fallback content items")
             }
 
             self.isLoading = false

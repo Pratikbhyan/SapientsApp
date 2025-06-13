@@ -25,6 +25,11 @@ class QuickNotesRepository: ObservableObject {
     }
 
     func addSection(content: String, date: Date = Date()) {
+        // MIGRATION: Use new Highlights system instead
+        // Default to "Quick Notes" as the group title for backwards compatibility
+        HighlightRepository.shared.add(content, to: "Quick Notes")
+        
+        // Legacy note system - keep for any existing references
         let newSection = NoteSection(date: date, content: content)
         noteSections.insert(newSection, at: 0) // Add new notes to the top
         saveNoteSections()

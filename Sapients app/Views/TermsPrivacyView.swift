@@ -7,7 +7,7 @@ struct TermsPrivacyView: View {
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
-        SafariWebView(url: url, dismiss: dismiss)
+           SafariWebView(url: url, dismiss: dismiss)
             .edgesIgnoringSafeArea(.all)
     }
 }

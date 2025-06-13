@@ -10,7 +10,7 @@ import GoogleSignIn
 
 // Enum to identify tabs
 enum TabIdentifier {
-    case nowPlaying, library, quickNotes
+    case nowPlaying, library, highlights
 }
 
 @main
@@ -79,9 +79,9 @@ struct Sapients_appApp: App {
                     }
                 
                 QuickNotesView()
-                    .tag(TabIdentifier.quickNotes)
+                    .tag(TabIdentifier.highlights)
                     .tabItem {
-                        Label("Quick Notes", systemImage: "note.text")
+                        Label("Highlights", systemImage: "highlighter")
                     }
             }
             .onChange(of: selectedTab) { _, newTab in
@@ -159,9 +159,10 @@ struct Sapients_appApp: App {
                         window.overrideUserInterfaceStyle = .dark
                     }
                 }
+            }
         }
     }
-}
+
 
 extension Notification.Name {
     static let dailyEpisodeNotificationTapped = Notification.Name("dailyEpisodeNotificationTapped")
