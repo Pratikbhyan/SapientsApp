@@ -37,8 +37,11 @@ struct PlayingView: View {
     @State private var showAddNoteDialog = false
     @State private var tappedTranscriptionText = ""
     @State private var isSeekingFromTap = false
+    @State private var isUpdatingFromPlayer = false
+    // SIMPLIFIED: Navigation state
+    @State private var userHasScrolledAway = false
+    @State private var showNavigationButton = false
 
-    // NEW: throttle auto‑scrolls to reduce "twitching"
     @State private var lastAutoScrollIndex: Int? = nil
 
     // Constants
@@ -49,7 +52,40 @@ struct PlayingView: View {
     var body: some View {
         VStack(spacing: 0) {
             topBar
-            transcriptionArea
+            ZStack {
+                transcriptionArea
+                
+                // SIMPLIFIED: Navigation button overlay
+                if showNavigationButton {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button(action: returnToCurrentSegment) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "location.fill")
+                                        .font(.system(size: 14))
+                                    Text("Now Playing")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.blue.opacity(0.9))
+                                        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 2)
+                                )
+                                .foregroundColor(.white)
+                            }
+                            .padding(.trailing, 20)
+                        }
+                        .padding(.bottom, 100) // Above audio controls
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            
             DetailedAudioControls(content: content, audioPlayer: audioPlayer)
                 .padding(.horizontal, 20)
                 .padding(.bottom, safeAreaInsets.bottom == 0 ? 8 : safeAreaInsets.bottom)
@@ -79,15 +115,23 @@ struct PlayingView: View {
         )
         .confirmationDialog("Add to Highlights?", isPresented: $showAddNoteDialog, titleVisibility: .visible) {
             Button("Add") {
-                HighlightRepository.shared.add(tappedTranscriptionText, to: content.title, contentId: content.id)
+                if let transcriptionIndex = repository.transcriptions.firstIndex(where: { $0.text == tappedTranscriptionText }) {
+                    let startTime = repository.transcriptions[transcriptionIndex].startTime
+                    HighlightRepository.shared.add(tappedTranscriptionText, to: content.title, contentId: content.id, startTime: startTime)
+                } else {
+                    HighlightRepository.shared.add(tappedTranscriptionText, to: content.title, contentId: content.id)
+                }
             }
             Button("Cancel", role: .cancel) { }
         }
         .onAppear {
             loadTranscriptionsIfNeeded()
         }
+        // FIXED: Restore simple transcription updates
         .onChange(of: audioPlayer.currentTime) { _, _ in
-            audioPlayer.updateCurrentTranscription(transcriptions: repository.transcriptions)
+            if !isSeekingFromTap {
+                audioPlayer.updateCurrentTranscription(transcriptions: repository.transcriptions)
+            }
         }
         .toolbar(.hidden, for: .tabBar)
         .ignoresSafeArea()
@@ -101,6 +145,15 @@ struct PlayingView: View {
 }
 
 private extension PlayingView {
+    
+    // SIMPLIFIED: Return to current segment
+    func returnToCurrentSegment() {
+        userHasScrolledAway = false
+        withAnimation(.interpolatingSpring(stiffness: 300, damping: 25)) {
+            showNavigationButton = false
+        }
+    }
+
     var safeAreaInsets: UIEdgeInsets {
         (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first { $0.isKeyWindow }?.safeAreaInsets ?? .zero
     }
@@ -155,10 +208,11 @@ private extension PlayingView {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView(.vertical, showsIndicators: false) {
-                        LazyVStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 8) {
                             ForEach(repository.transcriptions.indices, id: \.self) { index in
                                 let transcription = repository.transcriptions[index]
                                 transcriptionTile(for: transcription, index: index, proxy: proxy)
+                                    .drawingGroup()
                                 if index < repository.transcriptions.count - 1 {
                                     Text(" ")
                                         .font(.system(size: currentFontSizePreset.size * 0.6))
@@ -169,25 +223,42 @@ private extension PlayingView {
                         .padding(.top, 10)
                         .padding(.bottom, fadeOutHeight + 5)
                     }
-                    .mask(
-                        VStack(spacing: 0) {
-                            Rectangle().fill(Color.black)
-                            LinearGradient(
-                                gradient: Gradient(colors: [Color.black, Color.black.opacity(0.0)]),
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                            .frame(height: fadeOutHeight)
-                        }
-                    )
+                    .scrollTargetLayout()
+                    .scrollIndicators(.hidden)
+                    .mask(fadeGradientMask)
                     .onChange(of: audioPlayer.currentTranscriptionIndex) { _, newValue in
                         guard !isSeekingFromTap else { return }
+                        
                         if newValue >= 0 && newValue < repository.transcriptions.count {
-                            if lastAutoScrollIndex == nil || abs(newValue - (lastAutoScrollIndex ?? 0)) > 1 {
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    proxy.scrollTo(newValue, anchor: .center)
+                            if !userHasScrolledAway {
+                                if lastAutoScrollIndex == nil || abs(newValue - (lastAutoScrollIndex ?? 0)) > 1 {
+                                    withAnimation(.interpolatingSpring(stiffness: 300, damping: 30)) {
+                                        proxy.scrollTo(newValue, anchor: .center)
+                                    }
+                                    lastAutoScrollIndex = newValue
                                 }
-                                lastAutoScrollIndex = newValue
+                            } else {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    showNavigationButton = true
+                                }
+                            }
+                        }
+                    }
+                    .gesture(
+                        DragGesture()
+                            .onChanged { _ in
+                                if !isSeekingFromTap {
+                                    userHasScrolledAway = true
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        showNavigationButton = true
+                                    }
+                                }
+                            }
+                    )
+                    .onChange(of: userHasScrolledAway) { _, hasScrolledAway in
+                        if !hasScrolledAway && audioPlayer.currentTranscriptionIndex >= 0 {
+                            withAnimation(.interpolatingSpring(stiffness: 300, damping: 25)) {
+                                proxy.scrollTo(audioPlayer.currentTranscriptionIndex, anchor: .center)
                             }
                         }
                     }
@@ -214,36 +285,87 @@ private extension PlayingView {
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .id(index)
+            .textSelection(.disabled)
+            .allowsHitTesting(true)
+            .background(Color.clear)
+            .compositingGroup()
+            .clipped()
             .onTapGesture {
+                UIMenuController.shared.hideMenu()
+                
                 isSeekingFromTap = true
+                userHasScrolledAway = false // Reset when user seeks
+                
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showNavigationButton = false
+                }
+                
                 audioPlayer.seek(to: TimeInterval(transcription.startTime))
                 audioPlayer.currentTranscriptionIndex = index
+                
                 if !audioPlayer.isPlaying {
                     audioPlayer.play()
                 }
-                withAnimation(.easeInOut(duration: 0.25)) {
+                
+                withAnimation(.interpolatingSpring(stiffness: 300, damping: 25)) {
                     proxy.scrollTo(index, anchor: .center)
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { isSeekingFromTap = false }
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { 
+                    isSeekingFromTap = false
+                }
             }
             .onLongPressGesture(minimumDuration: 0.6) {
-                guard isHighlighted else { return }
+                UIMenuController.shared.hideMenu()
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 tappedTranscriptionText = transcription.text
                 showAddNoteDialog = true
             }
+            .contextMenu {
+                Button(action: {
+                    HighlightRepository.shared.add(transcription.text, to: content.title, contentId: content.id, startTime: transcription.startTime)
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }) {
+                    Label("Add to Highlights", systemImage: "highlighter")
+                }
+                
+                Button(action: {
+                    UIPasteboard.general.string = transcription.text
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                }) {
+                    Label("Copy Text", systemImage: "doc.on.doc")
+                }
+                
+                Button(action: {
+                    shareTranscriptionText(transcription.text)
+                }) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+            }
     }
 
-    var maskGradient: some View {
+    private var fadeGradientMask: some View {
         VStack(spacing: 0) {
-            Rectangle().fill(Color.black)
+            Rectangle()
+                .fill(Color.black)
+            
             LinearGradient(
-                gradient: Gradient(colors: [Color.black, Color.black.opacity(0.0)]),
+                gradient: Gradient(stops: [
+                    .init(color: .black, location: 0.0),
+                    .init(color: .black.opacity(0.8), location: 0.3),
+                    .init(color: .black.opacity(0.4), location: 0.7),
+                    .init(color: .clear, location: 1.0)
+                ]),
                 startPoint: .top,
                 endPoint: .bottom
             )
             .frame(height: fadeOutHeight)
         }
+        .drawingGroup()
+    }
+
+    var maskGradient: some View {
+        fadeGradientMask
     }
 
     var viewDragGesture: some Gesture {
@@ -287,6 +409,30 @@ private extension PlayingView {
             miniPlayerState.isVisible = audioPlayer.hasLoadedTrack && !miniPlayerState.isPresentingFullPlayer
         }
     }
+
+    private func shareTranscriptionText(_ text: String) {
+        UIMenuController.shared.hideMenu()
+        
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first {
+            let activityVC = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+            
+            if let topController = window.rootViewController {
+                var presentedController = topController
+                while let presented = presentedController.presentedViewController {
+                    presentedController = presented
+                }
+                
+                if let popover = activityVC.popoverPresentationController {
+                    popover.sourceView = window
+                    popover.sourceRect = CGRect(x: window.bounds.midX, y: window.bounds.midY, width: 0, height: 0)
+                    popover.permittedArrowDirections = []
+                }
+                
+                presentedController.present(activityVC, animated: true)
+            }
+        }
+    }
 }
 
 struct DetailedAudioControls: View {
@@ -296,6 +442,7 @@ struct DetailedAudioControls: View {
     @State private var sliderValue: Double = 0
     @State private var isEditingSlider: Bool = false
     @State private var justSeeked: Bool = false
+    @State private var lastSliderUpdate: Date = Date()
 
     var body: some View {
         VStack(spacing: 10) {
@@ -307,12 +454,18 @@ struct DetailedAudioControls: View {
             .accentColor(.white.opacity(0.8))
             .padding(.vertical, 5)
             .onChange(of: audioPlayer.currentTime) { _, newTime in
-                if !isEditingSlider && !justSeeked {
+                guard !isEditingSlider && !justSeeked else { return }
+                
+                let now = Date()
+                // Only update slider every 0.5 seconds when not actively seeking
+                if now.timeIntervalSince(lastSliderUpdate) > 0.5 {
                     sliderValue = newTime
+                    lastSliderUpdate = now
                 }
             }
             .onAppear {
                 sliderValue = audioPlayer.currentTime
+                lastSliderUpdate = Date()
             }
             
             HStack {
@@ -369,7 +522,9 @@ struct DetailedAudioControls: View {
             isEditingSlider = false
             audioPlayer.seek(to: sliderValue)
             justSeeked = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            lastSliderUpdate = Date() // Reset timer after manual seek
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 justSeeked = false
             }
         }

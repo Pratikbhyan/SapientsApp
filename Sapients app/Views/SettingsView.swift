@@ -31,6 +31,7 @@ struct SettingsView: View {
     @State private var showingTerms = false
     @State private var showingPrivacy = false
     @State private var showingSupport = false
+    @State private var showingFeedback = false
     @Environment(\.dismiss) var dismiss
     
     // MARK: - App Icon Changer State and Options
@@ -170,6 +171,25 @@ struct SettingsView: View {
                     .padding(.vertical, 10)
                     .background(Color.gray.opacity(0.1))
                     
+                    HStack {
+                        Text("Send Feedback")
+                            .foregroundColor(Color(UIColor.label))
+                        Spacer()
+                        Image(systemName: "envelope")
+                            .foregroundColor(.blue)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 10)
+                    .background(Color.gray.opacity(0.1))
+                    .clipShape(Capsule())
+                    .contentShape(Capsule())
+                    .onTapGesture {
+                        showingFeedback = true
+                    }
+                    .sheet(isPresented: $showingFeedback) {
+                        FeedbackView()
+                    }
+
                     // About
                     NavigationLink(destination: AboutView()) {
                         HStack {

@@ -27,16 +27,31 @@ class HighlightRepository: ObservableObject {
     
     // MARK: - Public Methods
     
-    func add(_ text: String, to title: String, thumbnailName: String? = nil, contentId: UUID? = nil) {
+    func add(_ text: String, to title: String, thumbnailName: String? = nil, contentId: UUID? = nil, startTime: Float? = nil) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         
-        print("🟡 DEBUG: Adding highlight - text: '\(text)', title: '\(title)', contentId: \(contentId?.uuidString ?? "nil")")
+        print("🟡 DEBUG: Adding highlight - text: '\(text)', title: '\(title)', contentId: \(contentId?.uuidString ?? "nil"), startTime: \(startTime ?? 0)")
         
-        let newSegment = HighlightSegment(text: text)
+        let newSegment = HighlightSegment(text: text, startTime: startTime)
         
         // Update local state immediately for responsive UI
         if let idx = groups.firstIndex(where: { $0.title == title }) {
             groups[idx].segments.insert(newSegment, at: 0)
+            groups[idx].segments.sort { first, second in
+                // If both have start times, sort by start time
+                if let firstTime = first.startTime, let secondTime = second.startTime {
+                    return firstTime < secondTime
+                }
+                // If only one has start time, prioritize it
+                if first.startTime != nil && second.startTime == nil {
+                    return true
+                }
+                if first.startTime == nil && second.startTime != nil {
+                    return false
+                }
+                // If neither has start time, sort by date added (newest first)
+                return first.dateAdded > second.dateAdded
+            }
         } else {
             let newGroup = HighlightGroup(title: title, thumbnailName: thumbnailName, segments: [newSegment])
             groups.insert(newGroup, at: 0)
@@ -246,16 +261,32 @@ class HighlightRepository: ObservableObject {
             }
         }
         
-        // Convert to HighlightGroup array
+        // Convert to HighlightGroup array with proper sorting
         groups = groupedHighlights.map { (title, segments) in
-            HighlightGroup(
+            let sortedSegments = segments.sorted { first, second in
+                // If both have start times, sort by start time (ascending - story order)
+                if let firstTime = first.startTime, let secondTime = second.startTime {
+                    return firstTime < secondTime
+                }
+                // If only one has start time, prioritize it
+                if first.startTime != nil && second.startTime == nil {
+                    return true
+                }
+                if first.startTime == nil && second.startTime != nil {
+                    return false
+                }
+                // If neither has start time, sort by date added (newest first)
+                return first.dateAdded > second.dateAdded
+            }
+            
+            return HighlightGroup(
                 title: title,
                 thumbnailName: nil,
-                segments: segments.sorted { $0.dateAdded > $1.dateAdded }
+                segments: sortedSegments
             )
         }.sorted { $0.segments.first?.dateAdded ?? Date.distantPast > $1.segments.first?.dateAdded ?? Date.distantPast }
         
-        print("🟢 DEBUG: Created \(groups.count) highlight groups")
+        print("🟢 DEBUG: Created \(groups.count) highlight groups with natural story ordering")
     }
     
     // MARK: - Local Storage (Backup)
