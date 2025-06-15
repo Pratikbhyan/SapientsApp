@@ -2,6 +2,13 @@ import SwiftUI
 import AVFoundation
 import UIKit
 
+struct TileFramePrefKey: PreferenceKey {
+    static var defaultValue: [Int: CGRect] = [:]
+    static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
+    }
+}
+
 enum FontSizePreset: CaseIterable, Identifiable {
     case small, medium, large
 
@@ -37,12 +44,11 @@ struct PlayingView: View {
     @State private var showAddNoteDialog = false
     @State private var tappedTranscriptionText = ""
     @State private var isSeekingFromTap = false
-    @State private var isUpdatingFromPlayer = false
-    // SIMPLIFIED: Navigation state
-    @State private var userHasScrolledAway = false
-    @State private var showNavigationButton = false
-
-    @State private var lastAutoScrollIndex: Int? = nil
+    // Auto‑scroll management
+    @State private var autoScrollEnabled: Bool = true
+    @State private var showReturnButton: Bool = false
+    @State private var visibleIndices: Set<Int> = []
+    @State private var scrollViewHeight: CGFloat = 0
 
     // Constants
     private let fadeOutHeight: CGFloat = 40
@@ -52,40 +58,7 @@ struct PlayingView: View {
     var body: some View {
         VStack(spacing: 0) {
             topBar
-            ZStack {
-                transcriptionArea
-                
-                // SIMPLIFIED: Navigation button overlay
-                if showNavigationButton {
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            Button(action: returnToCurrentSegment) {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "location.fill")
-                                        .font(.system(size: 14))
-                                    Text("Now Playing")
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 10)
-                                .background(
-                                    Capsule()
-                                        .fill(Color.blue.opacity(0.9))
-                                        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 2)
-                                )
-                                .foregroundColor(.white)
-                            }
-                            .padding(.trailing, 20)
-                        }
-                        .padding(.bottom, 100) // Above audio controls
-                    }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            
+            transcriptionArea
             DetailedAudioControls(content: content, audioPlayer: audioPlayer)
                 .padding(.horizontal, 20)
                 .padding(.bottom, safeAreaInsets.bottom == 0 ? 8 : safeAreaInsets.bottom)
@@ -124,17 +97,14 @@ struct PlayingView: View {
             }
             Button("Cancel", role: .cancel) { }
         }
+        .toolbar(.hidden, for: .tabBar)
+        .ignoresSafeArea()
         .onAppear {
             loadTranscriptionsIfNeeded()
         }
-        // FIXED: Restore simple transcription updates
         .onChange(of: audioPlayer.currentTime) { _, _ in
-            if !isSeekingFromTap {
-                audioPlayer.updateCurrentTranscription(transcriptions: repository.transcriptions)
-            }
+            audioPlayer.updateCurrentTranscription(transcriptions: repository.transcriptions)
         }
-        .toolbar(.hidden, for: .tabBar)
-        .ignoresSafeArea()
         .onAppear {
             adjustMiniPlayerVisibility(isAppearing: true)
         }
@@ -145,15 +115,6 @@ struct PlayingView: View {
 }
 
 private extension PlayingView {
-    
-    // SIMPLIFIED: Return to current segment
-    func returnToCurrentSegment() {
-        userHasScrolledAway = false
-        withAnimation(.interpolatingSpring(stiffness: 300, damping: 25)) {
-            showNavigationButton = false
-        }
-    }
-
     var safeAreaInsets: UIEdgeInsets {
         (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.windows.first { $0.isKeyWindow }?.safeAreaInsets ?? .zero
     }
@@ -206,64 +167,102 @@ private extension PlayingView {
                     .padding()
                     .frame(maxHeight: .infinity)
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            ForEach(repository.transcriptions.indices, id: \.self) { index in
-                                let transcription = repository.transcriptions[index]
-                                transcriptionTile(for: transcription, index: index, proxy: proxy)
-                                    .drawingGroup()
-                                if index < repository.transcriptions.count - 1 {
-                                    Text(" ")
-                                        .font(.system(size: currentFontSizePreset.size * 0.6))
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                GeometryReader { geometry in
+                    ScrollViewReader { proxy in
+                        ZStack(alignment: .bottomTrailing) {
+                            ScrollView(.vertical, showsIndicators: false) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ForEach(repository.transcriptions.indices, id: \.self) { index in
+                                        let transcription = repository.transcriptions[index]
+                                        transcriptionTile(for: transcription, index: index, proxy: proxy)
+                                            .drawingGroup()
+                                        if index < repository.transcriptions.count - 1 {
+                                            Text(" ")
+                                                .font(.system(size: currentFontSizePreset.size * 0.6))
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                    }
                                 }
+                                .padding(.top, 10)
+                                .padding(.bottom, fadeOutHeight + 5)
                             }
-                        }
-                        .padding(.top, 10)
-                        .padding(.bottom, fadeOutHeight + 5)
-                    }
-                    .scrollTargetLayout()
-                    .scrollIndicators(.hidden)
-                    .mask(fadeGradientMask)
-                    .onChange(of: audioPlayer.currentTranscriptionIndex) { _, newValue in
-                        guard !isSeekingFromTap else { return }
-                        
-                        if newValue >= 0 && newValue < repository.transcriptions.count {
-                            if !userHasScrolledAway {
-                                if lastAutoScrollIndex == nil || abs(newValue - (lastAutoScrollIndex ?? 0)) > 1 {
+                            .scrollIndicators(.hidden)
+                            .coordinateSpace(name: "TranscriptSpace")
+                            .onPreferenceChange(TileFramePrefKey.self) { frames in
+                                let visible = frames.filter { _, frame in
+                                    let minY = frame.minY
+                                    let maxY = frame.maxY
+                                    return maxY > 0 && minY < scrollViewHeight
+                                }
+                                visibleIndices = Set(visible.keys)
+                                updateReturnButton()
+                            }
+                            .simultaneousGesture(
+                                DragGesture().onChanged { _ in
+                                    if autoScrollEnabled {
+                                        autoScrollEnabled = false
+                                    }
+                                    updateReturnButton()
+                                }
+                            )
+                            .mask(fadeGradientMask)
+                            .onChange(of: audioPlayer.currentTranscriptionIndex) { _, newValue in
+                                guard autoScrollEnabled, !isSeekingFromTap else { return }
+                                if newValue >= 0 && newValue < repository.transcriptions.count {
                                     withAnimation(.interpolatingSpring(stiffness: 300, damping: 30)) {
                                         proxy.scrollTo(newValue, anchor: .center)
                                     }
-                                    lastAutoScrollIndex = newValue
                                 }
-                            } else {
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    showNavigationButton = true
-                                }
+                                updateReturnButton()
                             }
-                        }
-                    }
-                    .gesture(
-                        DragGesture()
-                            .onChanged { _ in
-                                if !isSeekingFromTap {
-                                    userHasScrolledAway = true
-                                    withAnimation(.easeInOut(duration: 0.3)) {
-                                        showNavigationButton = true
+                            .onChange(of: visibleIndices) { _, _ in
+                                updateReturnButton()
+                            }
+                            .onAppear {
+                                if audioPlayer.currentTranscriptionIndex >= 0 && audioPlayer.currentTranscriptionIndex < repository.transcriptions.count {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        withAnimation(.interpolatingSpring(stiffness: 300, damping: 30)) {
+                                            proxy.scrollTo(audioPlayer.currentTranscriptionIndex, anchor: .center)
+                                        }
                                     }
                                 }
                             }
-                    )
-                    .onChange(of: userHasScrolledAway) { _, hasScrolledAway in
-                        if !hasScrolledAway && audioPlayer.currentTranscriptionIndex >= 0 {
-                            withAnimation(.interpolatingSpring(stiffness: 300, damping: 25)) {
-                                proxy.scrollTo(audioPlayer.currentTranscriptionIndex, anchor: .center)
+                            
+                            if showReturnButton {
+                                let minVisible = visibleIndices.min() ?? 0
+                                let maxVisible = visibleIndices.max() ?? 0
+                                let currentIndex = audioPlayer.currentTranscriptionIndex
+                                
+                                if currentIndex < minVisible || currentIndex > maxVisible {
+                                    let arrowName = currentIndex < minVisible ? "arrow.up.circle.fill" : "arrow.down.circle.fill"
+                                    Button(action: {
+                                        autoScrollEnabled = true
+                                        showReturnButton = false
+                                        withAnimation(.interpolatingSpring(stiffness: 300, damping: 30)) {
+                                            if audioPlayer.currentTranscriptionIndex >= 0 {
+                                                proxy.scrollTo(audioPlayer.currentTranscriptionIndex, anchor: .center)
+                                            }
+                                        }
+                                    }) {
+                                        Image(systemName: arrowName)
+                                            .font(.system(size: 44))
+                                            .foregroundColor(.white)
+                                            .shadow(radius: 4)
+                                            .padding(.trailing, 16)
+                                            .padding(.bottom, 16)
+                                    }
+                                    .transition(.scale.combined(with: .opacity))
+                                }
                             }
                         }
                     }
+                    .onAppear {
+                        scrollViewHeight = geometry.size.height
+                    }
+                    .onChange(of: geometry.size) { _, newSize in
+                        scrollViewHeight = newSize.height
+                    }
                 }
-                .layoutPriority(1)
                 .padding(.horizontal, 20)
             }
         }
@@ -271,44 +270,43 @@ private extension PlayingView {
     }
 
     @ViewBuilder
-    func transcriptionTile(for transcription: Transcription, index: Int, proxy: ScrollViewProxy) -> some View {
+    func transcriptionTile(for transcription: Transcription, index: Int, proxy: Any) -> some View {
         let isHighlighted = audioPlayer.currentTranscriptionIndex == index
         let baseFont = currentFontSizePreset.size
-        let fontSize = isHighlighted ? baseFont * 1.4 : baseFont
+        let fontSize = baseFont
 
         Text(transcription.text)
-            .fontWeight(isHighlighted ? .bold : .regular)
+            .fontWeight(.regular)
             .font(.system(size: fontSize))
-            .foregroundColor(isHighlighted ? .white.opacity(0.95) : .white.opacity(0.7))
-            .lineSpacing(isHighlighted ? 8 : 6)
+            .foregroundColor(isHighlighted ? .white : .white.opacity(0.35))
+            .lineSpacing(6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .id(index)
             .textSelection(.disabled)
             .allowsHitTesting(true)
-            .background(Color.clear)
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .preference(key: TileFramePrefKey.self,
+                                    value: [index: geo.frame(in: .named("TranscriptSpace"))])
+                }
+            )
             .compositingGroup()
             .clipped()
             .onTapGesture {
                 UIMenuController.shared.hideMenu()
                 
                 isSeekingFromTap = true
-                userHasScrolledAway = false // Reset when user seeks
-                
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    showNavigationButton = false
-                }
                 
                 audioPlayer.seek(to: TimeInterval(transcription.startTime))
                 audioPlayer.currentTranscriptionIndex = index
+                autoScrollEnabled = true
+                showReturnButton = false
                 
                 if !audioPlayer.isPlaying {
                     audioPlayer.play()
-                }
-                
-                withAnimation(.interpolatingSpring(stiffness: 300, damping: 25)) {
-                    proxy.scrollTo(index, anchor: .center)
                 }
                 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { 
@@ -342,6 +340,14 @@ private extension PlayingView {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
             }
+    }
+
+    func updateReturnButton() {
+        guard !autoScrollEnabled else {
+            showReturnButton = false
+            return
+        }
+        showReturnButton = !visibleIndices.contains(audioPlayer.currentTranscriptionIndex)
     }
 
     private var fadeGradientMask: some View {
@@ -457,7 +463,6 @@ struct DetailedAudioControls: View {
                 guard !isEditingSlider && !justSeeked else { return }
                 
                 let now = Date()
-                // Only update slider every 0.5 seconds when not actively seeking
                 if now.timeIntervalSince(lastSliderUpdate) > 0.5 {
                     sliderValue = newTime
                     lastSliderUpdate = now
@@ -522,7 +527,7 @@ struct DetailedAudioControls: View {
             isEditingSlider = false
             audioPlayer.seek(to: sliderValue)
             justSeeked = true
-            lastSliderUpdate = Date() // Reset timer after manual seek
+            lastSliderUpdate = Date()
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 justSeeked = false
