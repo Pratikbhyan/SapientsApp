@@ -143,7 +143,6 @@ struct MiniPlayerView_Previews: PreviewProvider {
             audioUrl: "example.mp3",
             imageUrl: nil, // Test with no image
             createdAt: Date(),
-            publishOn: Date(),
             transcriptionUrl: "example.csv"
         )
         audioPlayer.currentContent = mockContent

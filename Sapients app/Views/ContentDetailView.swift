@@ -17,7 +17,7 @@ struct ContentDetailView: View {
     private var currentDate: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM d"
-        return formatter.string(from: content.effectiveSortDate)
+        return formatter.string(from: content.createdAt)
     }
     
     private var isContentFree: Bool {
@@ -108,7 +108,7 @@ struct ContentDetailView: View {
     }
     
     private func triggerPreemptiveCaching() async {
-        print(" Preemptive caching disabled - episodes cached only when user plays them")
+        print("📱 Preemptive caching disabled - episodes cached only when user plays them")
     }
 }
 
@@ -319,7 +319,6 @@ struct ContentDetailView_Previews_FinalLayout: PreviewProvider {
             audioUrl: "sample.mp3",
             imageUrl: "sample.jpg",
             createdAt: Date(),
-            publishOn: nil,
             transcriptionUrl: nil
         )
         

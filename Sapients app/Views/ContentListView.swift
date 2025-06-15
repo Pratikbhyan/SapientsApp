@@ -43,7 +43,7 @@ struct ContentListView: View {
 
     // MARK: - Filter helpers
     private var filteredContents: [Content] {
-        let sorted = repository.contents.sorted { $0.effectiveSortDate < $1.effectiveSortDate }
+        let sorted = repository.contents.sorted { $0.createdAt < $1.createdAt }
         guard !searchText.isEmpty else { return sorted }
         return sorted.filter { $0.title.localizedCaseInsensitiveContains(searchText) || ($0.description?.localizedCaseInsensitiveContains(searchText) ?? false) }
     }
@@ -74,6 +74,7 @@ struct ContentListView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.white)
                         .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
@@ -101,10 +102,14 @@ struct ContentListView: View {
                 NavigationLink(destination: SettingsView()) {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 22))
+                        .foregroundColor(.white)
                         .frame(width: 44, height: 44)
                 }
             } else {
-                Spacer()
+                Text("Sapients")
+                    .font(.system(size: 28, weight: .heavy, design: .default))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 Button {
                     withAnimation(.easeInOut(duration: 0.25)) {
@@ -117,6 +122,7 @@ struct ContentListView: View {
                 } label: {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 22))
+                        .foregroundColor(.white)
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
@@ -124,6 +130,7 @@ struct ContentListView: View {
                 NavigationLink(destination: SettingsView()) {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 22))
+                        .foregroundColor(.white)
                         .frame(width: 44, height: 44)
                 }
             }
@@ -190,6 +197,7 @@ struct ContentListView: View {
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.white)
                             .frame(width: 32, height: 32)
                     }
                     .buttonStyle(.plain)
@@ -217,6 +225,7 @@ struct ContentListView: View {
                     NavigationLink(destination: SettingsView()) {
                         Image(systemName: "gearshape.fill")
                             .font(.system(size: 22))
+                            .foregroundColor(.white)
                             .frame(width: 44, height: 44)
                     }
                 }
@@ -444,7 +453,7 @@ struct ContentRowView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Text(content.publishOn ?? content.createdAt, style: .date)
+                Text(content.createdAt, style: .date)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

@@ -13,6 +13,33 @@ class SupabaseManager {
             fatalError("Invalid Supabase URL - Please update SupabaseManager.swift with your project URL")
         }
         
+        let jsonDecoder = JSONDecoder()
+        jsonDecoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let dateString = try container.decode(String.self)
+            
+            // Try parsing date-only format first (YYYY-MM-DD)
+            let dateOnlyFormatter = DateFormatter()
+            dateOnlyFormatter.dateFormat = "yyyy-MM-dd"
+            dateOnlyFormatter.timeZone = TimeZone(secondsFromGMT: 0) // UTC
+            
+            if let date = dateOnlyFormatter.date(from: dateString) {
+                return date
+            }
+            
+            // Fallback to ISO8601 format for other date fields
+            let iso8601Formatter = ISO8601DateFormatter()
+            if let date = iso8601Formatter.date(from: dateString) {
+                return date
+            }
+            
+            // If all fails, throw an error
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Cannot decode date string: \(dateString)"
+            )
+        }
+        
         // Initialize AuthOptions relying on the SDK's default storage mechanism.
         // For iOS, this should default to a persistent store (like GoTrueLocalStorage with UserDefaults).
         let authOptions = SupabaseClientOptions.AuthOptions(
@@ -21,9 +48,11 @@ class SupabaseManager {
 
         let options = SupabaseClientOptions(
             db: SupabaseClientOptions.DatabaseOptions(schema: "public"),
-            auth: authOptions
-            // Other options like global, functions, realtime are omitted for simplicity;
-            // they can be added if specifically needed and if their structure is known for this SDK version.
+            auth: authOptions,
+            global: SupabaseClientOptions.GlobalOptions(
+                headers: [:],
+                session: URLSession.shared
+            )
         )
 
         client = SupabaseClient(
@@ -31,6 +60,9 @@ class SupabaseManager {
             supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ5dmduZ3dkbWptYWNlZmxqaGxsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgwNDMxOTIsImV4cCI6MjA2MzYxOTE5Mn0.AbhN-Pp4e-wNS9ofL4OtlGnPU9h8UHYYn5nNqCJ_cvM",
             options: options
         )
+        
+        // Note: This may need to be applied differently depending on Supabase SDK version
+        // If this doesn't work, we'll handle it in the Content model instead
     }
 
     // MARK: - Apple Sign-In Nonce Generation
@@ -63,4 +95,4 @@ class SupabaseManager {
         let hashString = hashed.compactMap { String(format: "%02x", $0) }.joined()
         return hashString
     }
-} 
+}

@@ -49,11 +49,11 @@ class NotificationService: ObservableObject {
             guard let targetDate = calendar.date(byAdding: .day, value: daysAhead, to: Date()) else { continue }
             
             // Check if content is available for this date
-            let hasContent = await contentRepo.hasContentAvailableAt5AM(for: targetDate)
+            let hasContent = await contentRepo.hasContentForDate(targetDate)
             
             if hasContent {
                 // Get the content to create a personalized notification
-                if let content = await contentRepo.getContentAvailableAt5AM(for: targetDate) {
+                if let content = await contentRepo.getContentForDate(targetDate) {
                     await scheduleNotificationForDate(targetDate, content: content)
                 }
             }
@@ -77,10 +77,10 @@ class NotificationService: ObservableObject {
             "date": ISO8601DateFormatter().string(from: date)
         ]
         
-        // Schedule for 5:00 AM on the specific date
+        // Schedule for midnight (start of day) when content becomes available
         var triggerComponents = dateComponents
-        triggerComponents.hour = 5
-        triggerComponents.minute = 0
+        triggerComponents.hour = 0
+        triggerComponents.minute = 1  // 1 minute after midnight to ensure content is available
         triggerComponents.second = 0
         
         let trigger = UNCalendarNotificationTrigger(
@@ -112,27 +112,18 @@ class NotificationService: ObservableObject {
         setupDailyNotifications()
     }
     
-    // MARK: - Check if new episode is available RIGHT NOW (at 5 AM)
+    // MARK: - Check if new episode is available for today
     func checkForNewEpisodeNow() async -> Bool {
-        let now = Date()
-        let calendar = Calendar.current
-        let currentHour = calendar.component(.hour, from: now)
-        
-        // Only consider it "new" if it's currently between 5 AM and 6 AM
-        guard currentHour == 5 else {
-            return false
-        }
-        
-        let today = calendar.startOfDay(for: now)
+        let today = Calendar.current.startOfDay(for: Date())
         let contentRepo = await MainActor.run { ContentRepository() }
         
-        return await contentRepo.hasContentAvailableAt5AM(for: today)
+        return await contentRepo.hasContentForDate(today)
     }
     
     func getTodaysEpisode() async -> Content? {
         let today = Calendar.current.startOfDay(for: Date())
         let contentRepo = await MainActor.run { ContentRepository() }
-        return await contentRepo.getContentAvailableAt5AM(for: today)
+        return await contentRepo.getContentForDate(today)
     }
     
     // MARK: - Cancel All Notifications

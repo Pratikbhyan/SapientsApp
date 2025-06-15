@@ -20,8 +20,8 @@ class SubscriptionService: ObservableObject {
             return true
         }
         
-        // Find the latest episode (most recent effectiveSortDate)
-        guard let latestContent = allContent.max(by: { $0.effectiveSortDate < $1.effectiveSortDate }) else {
+        // Find the latest episode (most recent createdAt date)
+        guard let latestContent = allContent.max(by: { $0.createdAt < $1.createdAt }) else {
             // If we can't determine latest, allow access (safety fallback)
             return true
         }
@@ -32,7 +32,7 @@ class SubscriptionService: ObservableObject {
     
     // Get user-friendly message for why content is locked
     func getSubscriptionMessage(for content: Content, in allContent: [Content]) -> String {
-        if let latestContent = allContent.max(by: { $0.effectiveSortDate < $1.effectiveSortDate }),
+        if let latestContent = allContent.max(by: { $0.createdAt < $1.createdAt }),
            content.id != latestContent.id {
             return "This episode requires a Sapients subscription. Upgrade to access all previous episodes!"
         }

@@ -18,19 +18,19 @@ class ContentRepository: ObservableObject {
         self.error = nil
         
         do {
-            let now = ISO8601DateFormatter().string(from: Date())
-
             let response: [Content] = try await supabase
                 .from("content")
-                .select("id, title, description, audio_url, image_url, created_at, publish_on, transcription_url") // Explicitly select all needed columns including publish_on
-                .or("publish_on.lte.\(now),publish_on.is.null") // publish_on <= now OR publish_on IS NULL
-                .order("created_at", ascending: false) // Keep existing order or adjust as needed
+                .select("id, title, description, audio_url, image_url, created_at, transcription_url")
+                .lte("created_at", value: todayDateString()) // Simple date comparison
+                .order("created_at", ascending: false)
                 .execute()
                 .value
             
+            print("📅 Found \(response.count) content items available for today")
             self.contents = response
             self.isLoading = false
         } catch {
+            print("❌ Error fetching all content: \(error)")
             self.error = error
             self.isLoading = false
         }
@@ -89,7 +89,7 @@ class ContentRepository: ObservableObject {
             for line in dataLines {
                 let columns = line.split(separator: ",", maxSplits: 2, omittingEmptySubsequences: false).map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
                 
-                guard columns.count == 3, 
+                guard columns.count == 3,
                       let startTime = Float(columns[0]),
                       let endTime = Float(columns[1]) else {
                     print("Skipping malformed CSV line: \(line)")
@@ -99,11 +99,11 @@ class ContentRepository: ObservableObject {
                 let text = columns[2].trimmingCharacters(in: CharacterSet(charactersIn: "\"")) // Remove surrounding quotes if any
 
                 let transcription = Transcription(
-                    id: UUID(), 
-                    contentId: contentId, 
-                    text: text, 
-                    startTime: startTime, 
-                    endTime: endTime, 
+                    id: UUID(),
+                    contentId: contentId,
+                    text: text,
+                    startTime: startTime,
+                    endTime: endTime,
                     createdAt: Date()
                 )
                 parsedTranscriptions.append(transcription)
@@ -127,89 +127,52 @@ class ContentRepository: ObservableObject {
     
     // MARK: - Daily Content Operations
     func fetchDailyContent() async throws -> Content? {
-        self.isLoading = true 
+        self.isLoading = true
         self.error = nil
 
         do {
-            // Get current date and time in user's timezone
-            let now = Date()
-            let calendar = Calendar.current
+            let todayString = todayDateString()
             
-            let today = calendar.startOfDay(for: now)
-            let fiveAMToday = calendar.date(bySettingHour: 5, minute: 0, second: 0, of: today)!
+            print("📅 Looking for content for today: \(todayString)")
             
-            print(" Current time: \(now)")
-            print(" 5 AM today: \(fiveAMToday)")
-            print(" Is past 5 AM today: \(now >= fiveAMToday)")
-            
-            // Format dates for Supabase query (ISO 8601 format with timezone)
-            let formatter = ISO8601DateFormatter()
-            
-            // Determine which day's content to show based on 5 AM rule
-            let targetDate: Date
-            if now >= fiveAMToday {
-                // After 5 AM today - show today's content (if available)
-                targetDate = today
-                print(" Looking for content published on: \(today) (today)")
-            } else {
-                // Before 5 AM today - show yesterday's content
-                targetDate = calendar.date(byAdding: .day, value: -1, to: today)!
-                print(" Looking for content published on: \(targetDate) (yesterday, since before 5 AM)")
-            }
-            
-            let startOfTargetDay = calendar.startOfDay(for: targetDate)
-            let endOfTargetDay = calendar.date(byAdding: .day, value: 1, to: startOfTargetDay)!
-            
-            let startString = formatter.string(from: startOfTargetDay)
-            let endString = formatter.string(from: endOfTargetDay)
-            
-            print(" Searching for content between: \(startString) and \(endString)")
-            
-            // First try to get content scheduled for the target date
+            // First try to get content scheduled for today
             var response: [Content] = try await supabase
                 .from("content")
-                .select("id, title, description, audio_url, image_url, created_at, publish_on, transcription_url")
-                .gte("publish_on", value: startString)
-                .lt("publish_on", value: endString)
-                .order("publish_on", ascending: false)
+                .select("id, title, description, audio_url, image_url, created_at, transcription_url")
+                .eq("created_at", value: todayString) // Exact date match
                 .limit(1)
                 .execute()
                 .value
             
-            print(" Found \(response.count) content items for target date")
-            
-            // If no content scheduled for target date, get the latest available content
-            // that was published before the current effective time (respecting the 5 AM rule)
-            if response.isEmpty {
-                print("📅 No content for target date, looking for latest available content...")
-                
-                // FIXED: Use the same logic as Library view - only show content that should be available now
-                let nowString = formatter.string(from: now)
-                print("📅 Fallback: Looking for content published before: \(nowString)")
-                
-                response = try await supabase
-                    .from("content")
-                    .select("id, title, description, audio_url, image_url, created_at, publish_on, transcription_url")
-                    .or("publish_on.lte.\(nowString),publish_on.is.null") // Same filter as Library view
-                    .order("created_at", ascending: false)
-                    .limit(1)
-                    .execute()
-                    .value
-                
-                print("📅 Found \(response.count) fallback content items")
+            if let todayEpisode = response.first {
+                print("📅 Found today's episode: \(todayEpisode.title)")
+                self.isLoading = false
+                return todayEpisode
             }
-
+            
+            // If no content for today, get the latest available content
+            print("📅 No content for today, looking for latest available...")
+            response = try await supabase
+                .from("content")
+                .select("id, title, description, audio_url, image_url, created_at, transcription_url")
+                .lte("created_at", value: todayString) // Available by today
+                .order("created_at", ascending: false)
+                .limit(1)
+                .execute()
+                .value
+            
+            if let latestContent = response.first {
+                print("📅 Showing latest available: \(latestContent.title)")
+                self.isLoading = false
+                return latestContent
+            }
+            
+            print("📅 No content available yet")
             self.isLoading = false
+            return nil
             
-            if let content = response.first {
-                print(" Returning content: \(content.title) (published: \(content.publishOn?.description ?? "nil"))")
-            } else {
-                print(" No content found")
-            }
-            
-            return response.first
         } catch {
-            print(" Error fetching daily content: \(error)")
+            print("📅 Error fetching daily content: \(error)")
             self.error = error
             self.isLoading = false
             throw error
@@ -218,20 +181,12 @@ class ContentRepository: ObservableObject {
     
     func hasContentForDate(_ date: Date) async -> Bool {
         do {
-            let calendar = Calendar.current
-            let startOfDay = calendar.startOfDay(for: date)
-            let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+            let dateString = dateToString(date)
             
-            let formatter = ISO8601DateFormatter()
-            let startString = formatter.string(from: startOfDay)
-            let endString = formatter.string(from: endOfDay)
-            
-            // Check for content scheduled for this specific date
             let response: [Content] = try await supabase
                 .from("content")
                 .select("id", count: .exact)
-                .gte("publish_on", value: startString)
-                .lt("publish_on", value: endString)
+                .eq("created_at", value: dateString)
                 .execute()
                 .value
             
@@ -244,20 +199,12 @@ class ContentRepository: ObservableObject {
     
     func getContentForDate(_ date: Date) async -> Content? {
         do {
-            let calendar = Calendar.current
-            let startOfDay = calendar.startOfDay(for: date)
-            let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
-            
-            let formatter = ISO8601DateFormatter()
-            let startString = formatter.string(from: startOfDay)
-            let endString = formatter.string(from: endOfDay)
+            let dateString = dateToString(date)
             
             let response: [Content] = try await supabase
                 .from("content")
-                .select("id, title, description, audio_url, image_url, created_at, publish_on, transcription_url")
-                .gte("publish_on", value: startString)
-                .lt("publish_on", value: endString)
-                .order("publish_on", ascending: false)
+                .select("id, title, description, audio_url, image_url, created_at, transcription_url")
+                .eq("created_at", value: dateString)
                 .limit(1)
                 .execute()
                 .value
@@ -269,17 +216,15 @@ class ContentRepository: ObservableObject {
         }
     }
     
-    func hasContentAvailableAt5AM(for date: Date) async -> Bool {
-        let calendar = Calendar.current
-        let targetDay = calendar.startOfDay(for: date)
-        
-        return await hasContentForDate(targetDay)
+    // MARK: - Helper Methods
+    private func todayDateString() -> String {
+        return dateToString(Date())
     }
     
-    func getContentAvailableAt5AM(for date: Date) async -> Content? {
-        let calendar = Calendar.current
-        let targetDay = calendar.startOfDay(for: date)
-        
-        return await getContentForDate(targetDay)
+    private func dateToString(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone.current // Use user's timezone
+        return formatter.string(from: date)
     }
 }
