@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import Supabase
+import FirebaseAuth
 
 @MainActor
 class HighlightRepository: ObservableObject {
@@ -105,13 +106,13 @@ class HighlightRepository: ObservableObject {
     private func loadHighlights() async {
         print("🟡 DEBUG: Loading highlights from backend...")
         
-        guard let userId = await getCurrentUserId() else {
+        guard let userIdString = await getCurrentUserId() else {
             print("🔴 DEBUG: No user ID found, loading from local")
             loadFromLocal() // Fallback to local if not authenticated
             return
         }
         
-        print("🟢 DEBUG: Found user ID: \(userId)")
+        print("🟢 DEBUG: Found user ID: \(userIdString)")
         
         isLoading = true
         error = nil
@@ -121,7 +122,7 @@ class HighlightRepository: ObservableObject {
             let highlights: [SupabaseHighlight] = try await supabase
                 .from("highlights")
                 .select()
-                .eq("user_id", value: userId)
+                .eq("user_id", value: userIdString)
                 .order("created_at", ascending: false)
                 .execute()
                 .value
@@ -149,17 +150,17 @@ class HighlightRepository: ObservableObject {
     private func saveHighlightToBackend(segment: HighlightSegment, contentTitle: String, contentId: UUID?) async {
         print("🟡 DEBUG: Saving highlight to backend...")
         
-        guard let userId = await getCurrentUserId() else {
+        guard let userIdString = await getCurrentUserId() else {
             print("🔴 DEBUG: No user ID found, cannot save to backend")
             return
         }
         
-        print("🟢 DEBUG: User ID for saving: \(userId)")
+        print("🟢 DEBUG: User ID for saving: \(userIdString)")
         
         do {
             let supabaseHighlight = SupabaseHighlight(
                 from: segment,
-                userId: userId,
+                userId: userIdString,
                 contentId: contentId,
                 contentTitle: contentTitle
             )
@@ -212,7 +213,7 @@ class HighlightRepository: ObservableObject {
     private func deleteGroupFromBackend(groupTitle: String) async {
         print("🟡 DEBUG: Deleting highlight group from backend: \(groupTitle)")
         
-        guard let userId = await getCurrentUserId() else {
+        guard let userIdString = await getCurrentUserId() else {
             print("🔴 DEBUG: No user ID found, cannot delete group from backend")
             return
         }
@@ -221,7 +222,7 @@ class HighlightRepository: ObservableObject {
             try await supabase
                 .from("highlights")
                 .delete()
-                .eq("user_id", value: userId)
+                .eq("user_id", value: userIdString)
                 .eq("content_title", value: groupTitle)
                 .execute()
             
@@ -235,15 +236,14 @@ class HighlightRepository: ObservableObject {
     
     // MARK: - Helper Methods
     
-    private func getCurrentUserId() async -> UUID? {
-        do {
-            let session = try await supabase.auth.session
-            print("🟢 DEBUG: Found user session: \(session.user.id)")
-            return session.user.id
-        } catch {
-            print("🔴 DEBUG: No authenticated user found: \(error)")
+    private func getCurrentUserId() async -> String? {
+        guard let firebaseUser = Auth.auth().currentUser else {
+            print("🔴 DEBUG: No Firebase authenticated user found")
             return nil
         }
+        
+        print("🟢 DEBUG: Found Firebase user ID: \(firebaseUser.uid)")
+        return firebaseUser.uid
     }
     
     private func convertAndGroupHighlights(_ highlights: [SupabaseHighlight]) async {

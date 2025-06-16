@@ -80,17 +80,9 @@ class ImageService {
     }
 
     private func downloadAndCacheImage(from url: URL, cacheKey: NSString, fileURL: URL, completion: @escaping (UIImage?) -> Void) {
-        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30) // Ignore local URLCache, use ours
+        let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
         
-        // Add Supabase auth headers if needed (ensure getSupabaseToken() is robust)
-        if let token = getSupabaseToken() {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            // If your Supabase storage requires an anon key for direct URL access, add it here.
-            // request.setValue("YOUR_SUPABASE_ANON_KEY", forHTTPHeaderField: "apikey")
-            print("Added auth token to image request for URL: \(url.lastPathComponent)")
-        } else {
-            print("No auth token found for image request (URL: \(url.lastPathComponent)). Proceeding without.")
-        }
+        print("Downloading public image from Supabase Storage: \(url.absoluteString)")
         
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             guard let self = self else {
@@ -132,12 +124,6 @@ class ImageService {
             
             DispatchQueue.main.async { completion(image) }
         }.resume()
-    }
-
-    private func getSupabaseToken() -> String? {
-        // Ensure SupabaseManager and its client are accessed correctly and on the right thread if necessary.
-        // This is a synchronous call, ensure it doesn't block if SupabaseManager itself does async work to get client.
-        return SupabaseManager.shared.client.auth.currentSession?.accessToken
     }
 
     func clearMemoryCache() {

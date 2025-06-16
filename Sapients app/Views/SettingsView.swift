@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit // Needed for UIApplication
 import UserNotifications
-import Supabase
+import FirebaseAuth
 
 // Helper struct for App Icon options
 struct AppIconOption: Identifiable, Hashable {
@@ -22,7 +22,7 @@ struct AppIconOption: Identifiable, Hashable {
 }
 
 struct SettingsView: View {
-    @StateObject private var authManager = AuthManager.shared
+    @StateObject private var authManager = FirebaseAuthManager.shared
     @StateObject private var storeKit = StoreKitService.shared
     @State private var isShowingSubscriptionSheet = false
     @State private var showingDeleteConfirmation = false
@@ -62,39 +62,24 @@ struct SettingsView: View {
     
     private var displayName: String {
         guard let user = authManager.user else { return "User" }
-        let metadata = user.userMetadata
-
-        // Prioritize full_name from metadata
-        if let fullName = metadata["full_name"]?.stringValue, !fullName.isEmpty {
-            return fullName
+        
+        // Try display name first
+        if let displayName = user.displayName, !displayName.isEmpty {
+            return displayName
         }
-        // Fallback to name from metadata (if you decide to store 'name' like givenName)
-        if let name = metadata["name"]?.stringValue, !name.isEmpty {
-            return name
-        }
-        // Fallback to user's primary email prefix
+        
+        // Fallback to email prefix
         if let email = user.email, !email.isEmpty {
             return String(email.split(separator: "@").first ?? "User")
         }
-        // Fallback to generic "User"
+        
+        // Final fallback
         return "User"
     }
     
     private var profilePictureURL: URL? {
         guard let user = authManager.user else { return nil }
-        let metadata = user.userMetadata
-        
-        // Check for common avatar/picture keys
-        if let avatarURLString = metadata["avatar_url"]?.stringValue {
-            return URL(string: avatarURLString)
-        }
-        // Google often uses "picture"
-        if let pictureURLString = metadata["picture"]?.stringValue {
-            return URL(string: pictureURLString)
-        }
-        // Apple Sign In does not provide a picture URL directly.
-        // If Supabase populates a specific key for Apple's (non-existent) picture, add it here.
-        return nil
+        return user.photoURL
     }
     
     var body: some View {

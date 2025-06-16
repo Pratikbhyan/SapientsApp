@@ -1,5 +1,6 @@
 import Foundation
 import Supabase
+import FirebaseAuth
 
 class FeedbackService: ObservableObject {
     static let shared = FeedbackService()
@@ -13,10 +14,12 @@ class FeedbackService: ObservableObject {
             throw FeedbackError.emptyMessage
         }
         
-        // Get current user info
-        let currentUser = try await client.auth.session.user
-        let userId = currentUser.id.uuidString
-        let userEmail = currentUser.email
+        guard let firebaseUser = Auth.auth().currentUser else {
+            throw FeedbackError.userNotAuthenticated
+        }
+        
+        let userId = firebaseUser.uid
+        let userEmail = firebaseUser.email
         
         let feedback = Feedback(
             userId: userId,
@@ -34,6 +37,7 @@ class FeedbackService: ObservableObject {
 enum FeedbackError: LocalizedError {
     case emptyMessage
     case submissionFailed
+    case userNotAuthenticated
     
     var errorDescription: String? {
         switch self {
@@ -41,6 +45,8 @@ enum FeedbackError: LocalizedError {
             return "Please enter your feedback before sending."
         case .submissionFailed:
             return "Failed to submit feedback. Please try again."
+        case .userNotAuthenticated:
+            return "You must be signed in to submit feedback."
         }
     }
 }

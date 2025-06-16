@@ -73,13 +73,23 @@ class FirebaseAuthManager: ObservableObject {
         isDeletingAccount = true
         
         do {
+            let userId = user.uid
+            
             // Clear session data
             clearUserSession()
+            
+            do {
+                try await deleteUserDataFromSupabase(userId: userId)
+                print("[FirebaseAuthManager] Successfully deleted user data from Supabase")
+            } catch {
+                print("[FirebaseAuthManager] Warning: Failed to delete Supabase data, but continuing with account deletion: \(error.localizedDescription)")
+                // Don't throw - continue with Firebase account deletion
+            }
             
             // Delete the Firebase user account
             try await user.delete()
             
-            print("[FirebaseAuthManager] Account deleted successfully from Firebase")
+            print("[FirebaseAuthManager] Firebase account deleted successfully")
             
         } catch {
             print("[FirebaseAuthManager] Error during account deletion: \(error.localizedDescription)")
@@ -93,6 +103,42 @@ class FirebaseAuthManager: ObservableObject {
         }
         
         isDeletingAccount = false
+    }
+
+    private func deleteUserDataFromSupabase(userId: String) async throws {
+        let supabase = SupabaseManager.shared.client
+        
+        print("[FirebaseAuthManager] Attempting to delete user data from Supabase for user: \(userId)")
+        
+        // Use withTimeout to prevent hanging
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                // Delete highlights
+                try await supabase
+                    .from("highlights")
+                    .delete()
+                    .eq("user_id", value: userId)
+                    .execute()
+                print("[FirebaseAuthManager] Deleted highlights for user: \(userId)")
+            }
+            
+            group.addTask {
+                // Delete feedback - but allow this to fail silently as feedback might be kept for analytics
+                do {
+                    try await supabase
+                        .from("feedback")
+                        .delete()
+                        .eq("user_id", value: userId)
+                        .execute()
+                    print("[FirebaseAuthManager] Deleted feedback for user: \(userId)")
+                } catch {
+                    print("[FirebaseAuthManager] Note: Could not delete feedback (this is optional): \(error.localizedDescription)")
+                }
+            }
+            
+            // Wait for all tasks to complete
+            try await group.waitForAll()
+        }
     }
 
     // MARK: - Sign In Methods

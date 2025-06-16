@@ -3,8 +3,8 @@ import AuthenticationServices // For Sign In with Apple
 import UIKit // For UIApplication, UIRectCorner, UIBezierPath
 
 struct LoginView: View {
-    @StateObject private var authViewModel = AuthViewModel()
-    @EnvironmentObject var authManager: AuthManager // Use AuthManager from environment
+    @StateObject private var authViewModel = FirebaseAuthViewModel()
+    @EnvironmentObject var authManager: FirebaseAuthManager // Use AuthManager from environment
 
     var body: some View {
         GeometryReader { geometry in
@@ -41,25 +41,24 @@ struct LoginView: View {
                             ProgressView()
                                 .padding(.vertical, 10)
                         } else {
-                            // Sign In with Apple Button
+                            // Sign In with Google Button
                             AuthButton(imageName: "google_logo", text: "Continue with Google", backgroundColor: Color(white: 0.2), textColor: .white, action: {
                                 Task {
-                                    // AuthManager will automatically update the isAuthenticated state upon successful Supabase sign-in.
+                                    // FirebaseAuthManager will automatically update the isAuthenticated state upon successful sign-in
                                     _ = await authViewModel.signInWithGoogle()
                                 }
                             })
                             
                             SignInWithAppleButton(
                                 onRequest: { request in
-                                    // This part is handled by the AuthViewModel's signInWithApple method
+                                    // This part is handled by the FirebaseAuthViewModel's signInWithApple method
                                     // when it creates and performs the request.
-                                    // We just need to trigger the AuthViewModel's method.
+                                    // We just need to trigger the FirebaseAuthViewModel's method.
                                 },
                                 onCompletion: { result in
-                                    // This completion is for the button's action,
-                                    // The actual token handling and Supabase call is in AuthViewModel's delegate methods.
-                                    // AuthManager will automatically update the isAuthenticated state upon successful Supabase sign-in.
-                                    // The result of Apple Sign-In is handled within AuthViewModel and its delegate methods.
+                                    // The result of Apple Sign-In is handled within FirebaseAuthViewModel and its delegate methods
+                                    // FirebaseAuthManager will automatically update the isAuthenticated state upon successful sign-in
+                                    // The result of Apple Sign-In is handled within FirebaseAuthViewModel and its delegate methods.
                                 }
                             )
                             .signInWithAppleButtonStyle(.white) // Or .black, .whiteOutline
@@ -136,8 +135,8 @@ struct RoundedCorner: Shape {
 struct LoginView_Previews: PreviewProvider {
     static var previews: some View {
         LoginView()
-            .environmentObject(AuthManager.shared) // Inject AuthManager for preview
-            .environmentObject(AuthViewModel()) // AuthViewModel is still used locally by LoginView
+            .environmentObject(FirebaseAuthManager.shared) // Inject AuthManager for preview
+            .environmentObject(FirebaseAuthViewModel()) // AuthViewModel is still used locally by LoginView
     }
 }
 

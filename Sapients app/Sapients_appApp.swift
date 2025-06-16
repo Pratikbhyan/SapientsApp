@@ -7,6 +7,8 @@
 
 import SwiftUI
 import GoogleSignIn
+import FirebaseCore
+import FirebaseAuth
 
 // Enum to identify tabs
 enum TabIdentifier {
@@ -15,7 +17,7 @@ enum TabIdentifier {
 
 @main
 struct Sapients_appApp: App {
-    @StateObject private var authManager = AuthManager.shared
+    @StateObject private var authManager = FirebaseAuthManager.shared
     @StateObject private var contentRepository = ContentRepository()
     @StateObject private var audioPlayer = AudioPlayerService.shared
     @StateObject private var miniPlayerState = MiniPlayerState(player: AudioPlayerService.shared)
@@ -25,6 +27,7 @@ struct Sapients_appApp: App {
     @State private var isLoadingTranscription = false
 
     init() {
+        FirebaseApp.configure()
         configureGoogleSignIn()
         forceDarkMode()
     }
@@ -49,16 +52,6 @@ struct Sapients_appApp: App {
             .environmentObject(miniPlayerState)
             .environmentObject(quickNotesRepository)
             .environmentObject(storeKit)
-            .onOpenURL { url in
-                Task {
-                    do {
-                        try await SupabaseManager.shared.client.auth.session(from: url)
-                        print("Deep link processed by Supabase via onOpenURL. AuthManager will handle state update.")
-                    } catch {
-                        print("Error processing deeplink in onOpenURL: \(error.localizedDescription)")
-                    }
-                }
-            }
         }
     }
     

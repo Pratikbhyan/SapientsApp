@@ -51,7 +51,7 @@ struct HighlightGroup: Identifiable, Codable, Equatable {
 
 struct SupabaseHighlight: Codable, Identifiable {
     let id: UUID
-    let userId: UUID
+    let userId: String
     let contentId: UUID?
     let contentTitle: String
     let highlightText: String
@@ -70,7 +70,7 @@ struct SupabaseHighlight: Codable, Identifiable {
         case startTime = "start_time"
     }
     
-    init(id: UUID, userId: UUID, contentId: UUID?, contentTitle: String, highlightText: String, createdAt: Date, updatedAt: Date, startTime: Float? = nil) {
+    init(id: UUID, userId: String, contentId: UUID?, contentTitle: String, highlightText: String, createdAt: Date, updatedAt: Date, startTime: Float? = nil) {
         self.id = id
         self.userId = userId
         self.contentId = contentId
@@ -94,7 +94,7 @@ extension HighlightSegment {
 }
 
 extension SupabaseHighlight {
-    init(from segment: HighlightSegment, userId: UUID, contentId: UUID?, contentTitle: String) {
+    init(from segment: HighlightSegment, userId: String, contentId: UUID?, contentTitle: String) {
         self.id = segment.id
         self.userId = userId
         self.contentId = contentId
