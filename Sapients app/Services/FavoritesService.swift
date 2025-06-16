@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import Supabase
+import FirebaseAuth
 
 class FavoritesService: ObservableObject {
     static let shared = FavoritesService()
@@ -12,8 +13,8 @@ class FavoritesService: ObservableObject {
         SupabaseManager.shared.client
     }
     
-    private var authManager: AuthManager {
-        AuthManager.shared
+    private var authManager: FirebaseAuthManager {
+        FirebaseAuthManager.shared
     }
     
     private var cancellables = Set<AnyCancellable>()
@@ -49,7 +50,7 @@ class FavoritesService: ObservableObject {
             .sink { [weak self] user in
                 let isAuthenticated = self?.authManager.isAuthenticated ?? false
                 
-                if let userId = user?.id, isAuthenticated {
+                if let userId = user?.uid, isAuthenticated {
                     Task {
                         await self?.loadUserFavorites()
                     }
@@ -96,7 +97,7 @@ class FavoritesService: ObservableObject {
     
     @MainActor
     private func loadUserFavorites() async {
-        guard authManager.isAuthenticated, let userId = authManager.user?.id else {
+        guard authManager.isAuthenticated, let userId = authManager.user?.uid else {
             favoriteIDs = []
             return
         }
@@ -107,7 +108,7 @@ class FavoritesService: ObservableObject {
             let response: [UserFavorite] = try await supabase
                 .from("user_favorites")
                 .select("id, user_id, content_id, created_at")
-                .eq("user_id", value: userId.uuidString)
+                .eq("user_id", value: userId)
                 .execute()
                 .value
             
@@ -122,7 +123,7 @@ class FavoritesService: ObservableObject {
     
     @MainActor
     private func addFavoriteToSupabase(contentId: UUID) async {
-        guard let userId = authManager.user?.id else { 
+        guard let userId = authManager.user?.uid else { 
             return 
         }
         
@@ -145,7 +146,7 @@ class FavoritesService: ObservableObject {
     
     @MainActor
     private func removeFavoriteFromSupabase(contentId: UUID) async {
-        guard let userId = authManager.user?.id else { 
+        guard let userId = authManager.user?.uid else { 
             return 
         }
         
@@ -156,7 +157,7 @@ class FavoritesService: ObservableObject {
             let response = try await supabase
                 .from("user_favorites")
                 .delete()
-                .eq("user_id", value: userId.uuidString)
+                .eq("user_id", value: userId)
                 .eq("content_id", value: contentId.uuidString)
                 .execute()
             
@@ -187,7 +188,8 @@ class FavoritesService: ObservableObject {
 
 struct UserFavorite: Codable {
     let id: UUID
-    let userId: UUID
+    // CHANGE: Firebase uses String user IDs, not UUID
+    let userId: String
     let contentId: UUID
     let createdAt: Date
     
@@ -200,7 +202,8 @@ struct UserFavorite: Codable {
 }
 
 struct UserFavoriteInsert: Codable {
-    let userId: UUID
+    // CHANGE: Firebase uses String user IDs, not UUID
+    let userId: String
     let contentId: UUID
     
     enum CodingKeys: String, CodingKey {
