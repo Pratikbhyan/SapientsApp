@@ -9,22 +9,53 @@ struct TileFramePrefKey: PreferenceKey {
     }
 }
 
-enum FontSizePreset: CaseIterable, Identifiable {
+enum FontSizeLevel: CaseIterable, Identifiable {
     case small, medium, large
-
+    
     var id: Self { self }
-
+    
     var size: CGFloat {
         switch self {
-        case .small: return 18
-        case .medium: return 20
-        case .large: return 23
+        case .small: return 20    // Was medium (20pt) - now small
+        case .medium: return 24   // Was large (24pt) - now medium and default
+        case .large: return 28    // New larger size - now large
         }
     }
-
-    func next() -> FontSizePreset {
+    
+    func next() -> FontSizeLevel {
         let allCases = Self.allCases
         guard let currentIndex = allCases.firstIndex(of: self) else { return .medium }
+        let nextIndex = allCases.index(after: currentIndex)
+        return allCases.indices.contains(nextIndex) ? allCases[nextIndex] : allCases.first!
+    }
+}
+
+enum FontFamily: CaseIterable, Identifiable {
+    case system, rounded, serif, mono
+    
+    var id: Self { self }
+    
+    var displayName: String {
+        switch self {
+        case .system: return "System"
+        case .rounded: return "Rounded"
+        case .serif: return "Serif"
+        case .mono: return "Mono"
+        }
+    }
+    
+    func design() -> Font.Design {
+        switch self {
+        case .system: return .default
+        case .rounded: return .rounded
+        case .serif: return .serif
+        case .mono: return .monospaced
+        }
+    }
+    
+    func next() -> FontFamily {
+        let allCases = Self.allCases
+        guard let currentIndex = allCases.firstIndex(of: self) else { return .system }
         let nextIndex = allCases.index(after: currentIndex)
         return allCases.indices.contains(nextIndex) ? allCases[nextIndex] : allCases.first!
     }
@@ -39,16 +70,20 @@ struct PlayingView: View {
     var onDismissTapped: () -> Void
     
     // UI State
-    @State private var currentFontSizePreset: FontSizePreset = .medium
+    @State private var currentFontSize: FontSizeLevel = .medium
+    @State private var currentFontFamily: FontFamily = .system
     @State private var dragOffset: CGFloat = 0
     @State private var showAddNoteDialog = false
     @State private var tappedTranscriptionText = ""
     @State private var isSeekingFromTap = false
+    @State private var pendingSeekIndex: Int? = nil
+    @State private var showFontFamilyBubble = false
     // Auto‑scroll management
     @State private var autoScrollEnabled: Bool = true
     @State private var showReturnButton: Bool = false
     @State private var visibleIndices: Set<Int> = []
     @State private var scrollViewHeight: CGFloat = 0
+    @State private var tappedIndex: Int? = nil
 
     // Constants
     private let fadeOutHeight: CGFloat = 40
@@ -104,6 +139,10 @@ struct PlayingView: View {
         }
         .onChange(of: audioPlayer.currentTime) { _, _ in
             audioPlayer.updateCurrentTranscription(transcriptions: repository.transcriptions)
+            if let pending = pendingSeekIndex,
+               audioPlayer.currentTranscriptionIndex == pending {
+                pendingSeekIndex = nil
+            }
         }
         .onAppear {
             adjustMiniPlayerVisibility(isAppearing: true)
@@ -121,10 +160,54 @@ private extension PlayingView {
 
     var topBar: some View {
         ZStack {
-            Button(action: { currentFontSizePreset = currentFontSizePreset.next() }) {
-                Image(systemName: "textformat.size")
-                    .font(.title2)
-                    .foregroundColor(.white.opacity(0.8))
+            HStack {
+                Spacer()
+                
+                ZStack {
+                    if showFontFamilyBubble {
+                        HStack(spacing: 8) {
+                            ForEach(FontFamily.allCases) { family in
+                                Button(family.displayName) {
+                                    currentFontFamily = family
+                                    showFontFamilyBubble = false
+                                }
+                                .font(.caption)
+                                .foregroundColor(currentFontFamily == family ? .blue : .white.opacity(0.8))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(currentFontFamily == family ? Color.white.opacity(0.2) : Color.clear)
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.black.opacity(0.8))
+                                .shadow(radius: 4)
+                        )
+                        .offset(x: -80, y: 0) 
+                        .transition(.scale.combined(with: .opacity))
+                        .zIndex(1)
+                    }
+                    
+                    Button(action: {
+                        currentFontSize = currentFontSize.next()
+                    }) {
+                        Image(systemName: "textformat.size")
+                            .font(.title2)
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                    .onLongPressGesture(minimumDuration: 0.5) {
+                        withAnimation(.spring(response: 0.3)) {
+                            showFontFamilyBubble.toggle()
+                        }
+                    }
+                }
+                
+                Spacer()
             }
 
             HStack {
@@ -150,6 +233,13 @@ private extension PlayingView {
         .padding(.horizontal, 20)
         .padding(.top, safeAreaInsets.top == 0 ? 5 : safeAreaInsets.top)
         .padding(.bottom, 6)
+        .onTapGesture {
+            if showFontFamilyBubble {
+                withAnimation(.spring(response: 0.3)) {
+                    showFontFamilyBubble = false
+                }
+            }
+        }
     }
 
     var transcriptionArea: some View {
@@ -178,7 +268,7 @@ private extension PlayingView {
                                             .drawingGroup()
                                         if index < repository.transcriptions.count - 1 {
                                             Text(" ")
-                                                .font(.system(size: currentFontSizePreset.size * 0.6))
+                                                .font(.system(size: currentFontSize.size * 0.6, design: currentFontFamily.design()))
                                                 .frame(maxWidth: .infinity, alignment: .leading)
                                         }
                                     }
@@ -203,6 +293,11 @@ private extension PlayingView {
                                         autoScrollEnabled = false
                                     }
                                     updateReturnButton()
+                                    if showFontFamilyBubble {
+                                        withAnimation(.spring(response: 0.3)) {
+                                            showFontFamilyBubble = false
+                                        }
+                                    }
                                 }
                             )
                             .mask(fadeGradientMask)
@@ -271,13 +366,13 @@ private extension PlayingView {
 
     @ViewBuilder
     func transcriptionTile(for transcription: Transcription, index: Int, proxy: Any) -> some View {
-        let isHighlighted = audioPlayer.currentTranscriptionIndex == index
-        let baseFont = currentFontSizePreset.size
-        let fontSize = baseFont
+        let isCurrentlyPlaying = audioPlayer.currentTranscriptionIndex == index
+        let isPendingSeek = pendingSeekIndex == index
+        let isHighlighted = isCurrentlyPlaying || isPendingSeek
 
         Text(transcription.text)
             .fontWeight(.regular)
-            .font(.system(size: fontSize))
+            .font(.system(size: currentFontSize.size, weight: .regular, design: currentFontFamily.design()))
             .foregroundColor(isHighlighted ? .white : .white.opacity(0.35))
             .lineSpacing(6)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -286,6 +381,7 @@ private extension PlayingView {
             .id(index)
             .textSelection(.disabled)
             .allowsHitTesting(true)
+            .scaleEffect(isPendingSeek ? 1.02 : 1.0)
             .background(
                 GeometryReader { geo in
                     Color.clear
@@ -298,7 +394,13 @@ private extension PlayingView {
             .onTapGesture {
                 UIMenuController.shared.hideMenu()
                 
-                isSeekingFromTap = true
+                if showFontFamilyBubble {
+                    withAnimation(.spring(response: 0.3)) {
+                        showFontFamilyBubble = false
+                    }
+                }
+                
+                pendingSeekIndex = index
                 
                 audioPlayer.seek(to: TimeInterval(transcription.startTime))
                 audioPlayer.currentTranscriptionIndex = index
@@ -309,8 +411,13 @@ private extension PlayingView {
                     audioPlayer.play()
                 }
                 
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { 
+                isSeekingFromTap = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     isSeekingFromTap = false
+                }
+                
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    pendingSeekIndex = nil
                 }
             }
             .onLongPressGesture(minimumDuration: 0.6) {
@@ -340,6 +447,8 @@ private extension PlayingView {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
             }
+            .animation(.easeInOut(duration: 0.2), value: isHighlighted)
+            .animation(.easeInOut(duration: 0.15), value: isPendingSeek)
     }
 
     func updateReturnButton() {

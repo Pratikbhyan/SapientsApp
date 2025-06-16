@@ -4,7 +4,7 @@ import UIKit // For UIApplication, UIRectCorner, UIBezierPath
 
 struct LoginView: View {
     @StateObject private var authViewModel = FirebaseAuthViewModel()
-    @EnvironmentObject var authManager: FirebaseAuthManager // Use AuthManager from environment
+    @EnvironmentObject var authManager: FirebaseAuthManager
 
     var body: some View {
         GeometryReader { geometry in
@@ -27,24 +27,21 @@ struct LoginView: View {
                 VStack(spacing: 0) {
                     Spacer()
 
-                    // Buttons Container
                     VStack(spacing: 12) {
-
-                        if let errorMessage = authViewModel.errorMessage {
-                            Text(errorMessage)
-                                .foregroundColor(.red)
-                                .font(.caption)
-                                .padding(.vertical, 5)
+                        if authViewModel.isLoading {
+                            VStack(spacing: 8) {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(1.2)
+                            }
+                            .frame(height: 40)
+                            .frame(maxWidth: .infinity)
                         }
 
-                        if authViewModel.isLoading {
-                            ProgressView()
-                                .padding(.vertical, 10)
-                        } else {
+                        if !authViewModel.isLoading {
                             // Sign In with Google Button
                             AuthButton(imageName: "google_logo", text: "Continue with Google", backgroundColor: Color(white: 0.2), textColor: .white, action: {
                                 Task {
-                                    // FirebaseAuthManager will automatically update the isAuthenticated state upon successful sign-in
                                     _ = await authViewModel.signInWithGoogle()
                                 }
                             })
@@ -52,13 +49,9 @@ struct LoginView: View {
                             SignInWithAppleButton(
                                 onRequest: { request in
                                     // This part is handled by the FirebaseAuthViewModel's signInWithApple method
-                                    // when it creates and performs the request.
-                                    // We just need to trigger the FirebaseAuthViewModel's method.
                                 },
                                 onCompletion: { result in
                                     // The result of Apple Sign-In is handled within FirebaseAuthViewModel and its delegate methods
-                                    // FirebaseAuthManager will automatically update the isAuthenticated state upon successful sign-in
-                                    // The result of Apple Sign-In is handled within FirebaseAuthViewModel and its delegate methods.
                                 }
                             )
                             .signInWithAppleButtonStyle(.white) // Or .black, .whiteOutline
@@ -68,14 +61,21 @@ struct LoginView: View {
                                 authViewModel.signInWithApple()
                             }
                             .disabled(authViewModel.isLoading)
-                            .padding(.bottom, 30) // Increased from 10 to 30 for more black space
-                        } // End of else for isLoading
+                        } else {
+                            // Placeholder views to maintain button spacing when loading
+                            Spacer()
+                                .frame(height: 50) // Match Google button height
+                            
+                            Spacer()
+                                .frame(height: 50) // Match Apple button height
+                        }
                     }
                     .padding(.horizontal, 24)
-                    .padding(.top, 30)
-                    .padding(.bottom, max(30, geometry.safeAreaInsets.bottom + 15)) // Ensure proper bottom padding
+                    .padding(.top, 15)
+                    .padding(.bottom, max(30, geometry.safeAreaInsets.bottom + 10))
                     .background(Color.black.opacity(0.9)) // Semi-transparent background for better readability
                     .clipShape(RoundedCorner(radius: 30, corners: [.topLeft, .topRight]))
+                    .frame(height: 180)
                 }
                 .edgesIgnoringSafeArea(.bottom) // Allow black container to go to the bottom edge
             }
@@ -111,7 +111,6 @@ struct AuthButton: View {
                     .fontWeight(.medium)
                 Spacer()
             }
-            // .padding(.leading, 20) // Removed: Spacers will handle centering
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background(backgroundColor)
@@ -135,8 +134,8 @@ struct RoundedCorner: Shape {
 struct LoginView_Previews: PreviewProvider {
     static var previews: some View {
         LoginView()
-            .environmentObject(FirebaseAuthManager.shared) // Inject AuthManager for preview
-            .environmentObject(FirebaseAuthViewModel()) // AuthViewModel is still used locally by LoginView
+            .environmentObject(FirebaseAuthManager.shared)
+            .environmentObject(FirebaseAuthViewModel())
     }
 }
 
