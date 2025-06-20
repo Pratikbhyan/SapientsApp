@@ -8,6 +8,7 @@ struct Content: Identifiable, Codable, Equatable {
     let imageUrl: String?
     let createdAt: Date // This will now be a simple date (no time component)
     let transcriptionUrl: String?
+    let collectionId: UUID? // Optional – link to the parent collection
     
     var isAvailableToday: Bool {
         let today = Calendar.current.startOfDay(for: Date())
@@ -30,6 +31,8 @@ struct Content: Identifiable, Codable, Equatable {
         case imageUrl = "image_url"
         case createdAt = "created_at"
         case transcriptionUrl = "transcription_url"
+        case transcriptUrl = "transcript_url" // support legacy / alt column
+        case collectionId = "collection_id"
     }
     
     init(from decoder: Decoder) throws {
@@ -40,46 +43,59 @@ struct Content: Identifiable, Codable, Equatable {
         description = try container.decodeIfPresent(String.self, forKey: .description)
         audioUrl = try container.decode(String.self, forKey: .audioUrl)
         imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
-        transcriptionUrl = try container.decodeIfPresent(String.self, forKey: .transcriptionUrl)
+        
+        // Support both `transcription_url` and legacy `transcript_url`
+        if let url = try container.decodeIfPresent(String.self, forKey: .transcriptionUrl) {
+            transcriptionUrl = url
+        } else {
+            transcriptionUrl = try container.decodeIfPresent(String.self, forKey: .transcriptUrl)
+        }
+        
+        collectionId = try container.decodeIfPresent(UUID.self, forKey: .collectionId)
         
         // Custom date handling for simplified date format
         if let dateString = try? container.decode(String.self, forKey: .createdAt) {
-            // Parse date components directly to avoid timezone issues
-            let components = dateString.split(separator: "-")
-            if components.count == 3,
-               let year = Int(components[0]),
-               let month = Int(components[1]),
-               let day = Int(components[2]) {
-                
-                // Create date using user's current calendar and timezone
-                var calendar = Calendar.current
-                let dateComponents = DateComponents(year: year, month: month, day: day, hour: 0, minute: 0, second: 0)
-                
-                if let date = calendar.date(from: dateComponents) {
-                    createdAt = date
+            // Attempt several date formats commonly returned by Postgres / Supabase
+            func parse(_ string: String, format: String) -> Date? {
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.timeZone = TimeZone(secondsFromGMT: 0)
+                formatter.dateFormat = format
+                return formatter.date(from: string)
+            }
+
+            // 1️⃣ Simple YYYY-MM-DD
+            if let d = parse(dateString, format: "yyyy-MM-dd") {
+                createdAt = d
+            }
+            // 2️⃣ Postgres timestamp with timezone and microseconds: "yyyy-MM-dd HH:mm:ss.SSSSSSxxxxx"
+            else if let d = parse(dateString, format: "yyyy-MM-dd HH:mm:ss.SSSSSSxxxxx") {
+                createdAt = d
+            }
+            // 3️⃣ Postgres timestamp with timezone no microseconds
+            else if let d = parse(dateString, format: "yyyy-MM-dd HH:mm:ssxxxxx") {
+                createdAt = d
+            }
+            // 4️⃣ Try ISO8601 by replacing space with T
+            else if let d = ISO8601DateFormatter().date(from: dateString.replacingOccurrences(of: " ", with: "T")) {
+                createdAt = d
+            }
+            // 5️⃣ Handle timezone format ending with +00 (no minutes)
+            else {
+                var adjusted = dateString.replacingOccurrences(of: " ", with: "T")
+                if adjusted.hasSuffix("+00") { adjusted = adjusted.replacingOccurrences(of: "+00", with: "Z") }
+                let iso = ISO8601DateFormatter()
+                iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                if let d = iso.date(from: adjusted) {
+                    createdAt = d
                 } else {
-                    throw DecodingError.dataCorruptedError(
-                        forKey: .createdAt,
-                        in: container,
-                        debugDescription: "Cannot create date from components: \(dateString)"
-                    )
-                }
-            } else {
-                // Fallback to ISO8601 format
-                let iso8601Formatter = ISO8601DateFormatter()
-                if let date = iso8601Formatter.date(from: dateString) {
-                    createdAt = date
-                } else {
-                    throw DecodingError.dataCorruptedError(
-                        forKey: .createdAt,
-                        in: container,
-                        debugDescription: "Cannot decode date string: \(dateString)"
-                    )
+                    // Fallback: use current date to avoid crashing the decode
+                    createdAt = Date()
                 }
             }
         } else {
             // Try decoding as Date directly (fallback)
-            createdAt = try container.decode(Date.self, forKey: .createdAt)
+            createdAt = (try? container.decode(Date.self, forKey: .createdAt)) ?? Date()
         }
     }
     
@@ -92,6 +108,7 @@ struct Content: Identifiable, Codable, Equatable {
         try container.encode(audioUrl, forKey: .audioUrl)
         try container.encodeIfPresent(imageUrl, forKey: .imageUrl)
         try container.encodeIfPresent(transcriptionUrl, forKey: .transcriptionUrl)
+        try container.encodeIfPresent(collectionId, forKey: .collectionId)
         
         // Encode date as simple date string
         let dateFormatter = DateFormatter()
@@ -101,7 +118,7 @@ struct Content: Identifiable, Codable, Equatable {
         try container.encode(dateString, forKey: .createdAt)
     }
     
-    init(id: UUID, title: String, description: String?, audioUrl: String, imageUrl: String?, createdAt: Date, transcriptionUrl: String?) {
+    init(id: UUID, title: String, description: String?, audioUrl: String, imageUrl: String?, createdAt: Date, transcriptionUrl: String?, collectionId: UUID? = nil) {
         self.id = id
         self.title = title
         self.description = description
@@ -109,5 +126,6 @@ struct Content: Identifiable, Codable, Equatable {
         self.imageUrl = imageUrl
         self.createdAt = createdAt
         self.transcriptionUrl = transcriptionUrl
+        self.collectionId = collectionId
     }
 }

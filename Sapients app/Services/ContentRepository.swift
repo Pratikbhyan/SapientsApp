@@ -57,9 +57,15 @@ class ContentRepository: ObservableObject {
             return
         }
 
-        // Assuming CSVs are in a bucket named "transcriptions_csv" or similar.
-        // Please adjust "transcriptions_csv" if your bucket name is different.
-        guard let csvUrl = getPublicURL(for: path, bucket: "transcription") else { // Corrected bucket name
+        // Bucket is "transcriptions" (plural). Strip prefix if included in path.
+        let cleanPath: String
+        if path.hasPrefix("transcriptions/") {
+            cleanPath = String(path.dropFirst("transcriptions/".count))
+        } else {
+            cleanPath = path
+        }
+
+        guard let csvUrl = getPublicURL(for: cleanPath, bucket: "transcriptions") else {
             print("Could not get public URL for transcription CSV: \(path)")
             self.transcriptions = [] // Ensure it's empty if no path
             self.error = NSError(domain: "ContentRepository", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid CSV URL or no path provided for content ID: \(contentId)"])

@@ -12,7 +12,7 @@ import FirebaseAuth
 
 // Enum to identify tabs
 enum TabIdentifier {
-    case nowPlaying, library, highlights
+    case library, highlights
 }
 
 @main
@@ -23,7 +23,7 @@ struct Sapients_appApp: App {
     @StateObject private var miniPlayerState = MiniPlayerState(player: AudioPlayerService.shared)
     @StateObject private var quickNotesRepository = QuickNotesRepository.shared
     @StateObject private var storeKit = StoreKitService.shared
-    @State private var selectedTab: TabIdentifier = .nowPlaying
+    @State private var selectedTab: TabIdentifier = .library
     @State private var isLoadingTranscription = false
 
     init() {
@@ -39,7 +39,7 @@ struct Sapients_appApp: App {
                     .preferredColorScheme(.dark)
                 
                 // MiniPlayerView overlay
-                if miniPlayerState.isVisible && !miniPlayerState.isPresentingFullPlayer && selectedTab != .nowPlaying {
+                if miniPlayerState.isVisible && !miniPlayerState.isPresentingFullPlayer {
                     MiniPlayerView()
                 }
             }
@@ -59,13 +59,7 @@ struct Sapients_appApp: App {
     private var mainContent: some View {
         if authManager.isAuthenticated {
             TabView(selection: $selectedTab) {
-                DailyContentViewLoader()
-                    .tag(TabIdentifier.nowPlaying)
-                    .tabItem {
-                        Label("Now Playing", systemImage: "play.circle")
-                    }
-                
-                ContentListView()
+                CollectionsListView()
                     .tag(TabIdentifier.library)
                     .tabItem {
                         Label("Library", systemImage: "books.vertical")
@@ -105,12 +99,8 @@ struct Sapients_appApp: App {
                 
                 forceDarkMode()
             }
-            .onChange(of: selectedTab) { _, newTab in
-                if newTab == .nowPlaying {
-                    miniPlayerState.isVisible = false
-                } else {
-                    miniPlayerState.isVisible = audioPlayer.hasLoadedTrack
-                }
+            .onChange(of: selectedTab) { _, _ in
+                miniPlayerState.isVisible = audioPlayer.hasLoadedTrack
             }
         } else {
             LoginView()
