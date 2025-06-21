@@ -101,7 +101,7 @@ struct PlayingView: View {
         .frame(maxWidth: .infinity)
         .foregroundColor(.white)
         .offset(y: dragOffset)
-        .background(Color.clear)
+        .background(Color.black)
         .gesture(
             DragGesture(coordinateSpace: .global)
                 .onChanged { value in
@@ -145,10 +145,16 @@ struct PlayingView: View {
             }
         }
         .onAppear {
-            adjustMiniPlayerVisibility(isAppearing: true)
+            // Hide tab bar when full player appears
+            if #unavailable(iOS 16.0) {
+                UITabBar.appearance().isHidden = true
+            }
         }
         .onDisappear {
-            adjustMiniPlayerVisibility(isAppearing: false)
+            // Show tab bar when full player disappears
+            if #unavailable(iOS 16.0) {
+                UITabBar.appearance().isHidden = false
+            }
         }
     }
 }
@@ -514,16 +520,7 @@ private extension PlayingView {
         }
     }
 
-    func adjustMiniPlayerVisibility(isAppearing: Bool) {
-        if #unavailable(iOS 16.0) {
-            UITabBar.appearance().isHidden = isAppearing
-        }
-        if isAppearing {
-            miniPlayerState.isVisible = false
-        } else {
-            miniPlayerState.isVisible = audioPlayer.hasLoadedTrack && !miniPlayerState.isPresentingFullPlayer
-        }
-    }
+
 
     private func shareTranscriptionText(_ text: String) {
         UIMenuController.shared.hideMenu()

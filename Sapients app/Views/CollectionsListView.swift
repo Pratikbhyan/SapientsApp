@@ -2,6 +2,8 @@ import SwiftUI
 
 struct CollectionTileView: View {
     let collection: Collection
+    /// Optional namespace used for hero animation. Pass from parent when needed.
+    var coverNamespace: Namespace.ID?
     
     var body: some View {
         ZStack(alignment: .leading) {
@@ -9,7 +11,7 @@ struct CollectionTileView: View {
                 .fill(Color(.secondarySystemBackground))
                 .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
             HStack(spacing: 16) {
-                cover
+                coverImage
                     .frame(width: 100, height: 100)
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                 VStack(alignment: .leading, spacing: 6) {
@@ -30,15 +32,36 @@ struct CollectionTileView: View {
         .frame(maxWidth: .infinity, minHeight: 120)
     }
 
-    @ViewBuilder private var cover: some View {
+    // MARK: - cover image with optional matched-geometry effect + bottom fade
+    @ViewBuilder private var coverImage: some View {
+        // gradient overlay for bottom blur
+        let gradientOverlay = LinearGradient(
+            colors: [Color.black.opacity(0.3), .clear],
+            startPoint: .bottom,
+            endPoint: UnitPoint(x: 0.5, y: 0.2)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+
         if let url = getCollectionImageURL(for: collection) {
-            CachedAsyncImage(url: url) {
-                placeholder
+            let remote = CachedAsyncImage(url: url) { placeholder }
+            if let ns = coverNamespace {
+                remote
+                    .matchedGeometryEffect(id: "cover-\(collection.id)", in: ns)
+                    .overlay(gradientOverlay)
+            } else {
+                remote.overlay(gradientOverlay)
             }
         } else {
-            placeholder
+            if let ns = coverNamespace {
+                placeholder
+                    .matchedGeometryEffect(id: "cover-\(collection.id)", in: ns)
+                    .overlay(gradientOverlay)
+            } else {
+                placeholder.overlay(gradientOverlay)
+            }
         }
     }
+
     private var placeholder: some View {
         Rectangle().fill(Color.gray.opacity(0.3))
     }
@@ -46,6 +69,7 @@ struct CollectionTileView: View {
 
 struct CollectionsListView: View {
     @StateObject private var repository = CollectionRepository()
+    @Namespace private var coverNS // for matched-geometry hero animations
 
     var body: some View {
         NavigationView {
@@ -74,15 +98,21 @@ struct CollectionsListView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
-                LazyVStack(spacing: 20) {
+                LazyVStack(spacing: 24) {
                     ForEach(repository.collections) { collection in
-                        NavigationLink(destination: EpisodesListView(collection: collection)) {
-                            CollectionTileView(collection: collection)
+                        NavigationLink(destination: EpisodesListView(collection: collection, coverNamespace: coverNS)) {
+                            CollectionTileView(collection: collection, coverNamespace: coverNS)
                         }
                         .buttonStyle(.plain)
+                        // Slide-up appearance when entering viewport (iOS17)
+                        .scrollTransition(axis: .vertical) { content, phase in
+                            content
+                                .opacity(phase.isIdentity ? 1 : 0)
+                                .offset(y: phase.isIdentity ? 0 : 40)
+                        }
                     }
                 }
-                .padding()
+                .padding(.vertical, 20)
             }
         }
     }

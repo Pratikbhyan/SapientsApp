@@ -9,6 +9,7 @@ struct QuickHighlightsView: View {
     
     @State private var showActionSheet = false
     @State private var selectedHighlightText = ""
+    @State private var showingSettings = false
     
     private let skyBlue = Color(red: 135/255.0, green: 206/255.0, blue: 235/255.0)
 
@@ -70,6 +71,15 @@ struct QuickHighlightsView: View {
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "gear")
+                    }
+                }
+            }
             .confirmationDialog("Highlight Options", isPresented: $showActionSheet, titleVisibility: .visible) {
                 Button("Copy") {
                     copyHighlight(text: selectedHighlightText)
@@ -85,6 +95,9 @@ struct QuickHighlightsView: View {
                 }
             } message: {
                 Text(repo.error ?? "")
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
             }
         }
         .onAppear {

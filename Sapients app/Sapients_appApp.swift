@@ -38,13 +38,8 @@ struct Sapients_appApp: App {
                 mainContent
                     .preferredColorScheme(.dark)
                 
-                // MiniPlayerView overlay
-                if miniPlayerState.isVisible && !miniPlayerState.isPresentingFullPlayer {
-                    MiniPlayerView()
-                }
-            }
-            .sheet(isPresented: $miniPlayerState.isPresentingFullPlayer) {
-                fullPlayerSheet
+                // Unified draggable full-player ↔︎ mini-player container
+                MiniPlayerBarView()
             }
             .environmentObject(authManager)
             .environmentObject(contentRepository)
@@ -52,6 +47,9 @@ struct Sapients_appApp: App {
             .environmentObject(miniPlayerState)
             .environmentObject(quickNotesRepository)
             .environmentObject(storeKit)
+            .fullScreenCover(isPresented: $miniPlayerState.isPresentingFullPlayer) {
+                fullPlayerSheet
+            }
         }
     }
     
@@ -99,9 +97,7 @@ struct Sapients_appApp: App {
                 
                 forceDarkMode()
             }
-            .onChange(of: selectedTab) { _, _ in
-                miniPlayerState.isVisible = audioPlayer.hasLoadedTrack
-            }
+
         } else {
             LoginView()
         }
@@ -121,7 +117,7 @@ struct Sapients_appApp: App {
                     audioPlayer: audioPlayer,
                     isLoadingTranscription: $isLoadingTranscription,
                     onDismissTapped: {
-                        miniPlayerState.isPresentingFullPlayer = false
+                        miniPlayerState.dismissFullPlayer()
                     }
                 )
             }

@@ -49,7 +49,8 @@ class ImageService {
         
         // Check memory cache first
         if let cachedImage = cache.object(forKey: cacheKey) {
-            print("Image loaded from memory cache: \(url.lastPathComponent)")
+            // Debug: comment out to reduce console spam
+            // print("Image loaded from memory cache: \(url.lastPathComponent)")
             DispatchQueue.main.async {
                 completion(cachedImage)
             }

@@ -133,6 +133,12 @@ class AudioPlayerService: ObservableObject {
     }
     
     func loadAudio(from remoteURL: URL, for content: Content, autoPlay: Bool = false) {
+        // Prevent loading if already loading the same content
+        if isLoadingAudio && currentContent?.id == content.id {
+            print("ℹ️ Already loading audio for: \(content.title)")
+            return
+        }
+        
         // Stop current audio immediately to prevent overlap
         if let player = player {
             player.pause()
@@ -165,14 +171,18 @@ class AudioPlayerService: ObservableObject {
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 
+                // Double-check we're still loading the same content
+                guard self.currentContent?.id == content.id else {
+                    print("ℹ️ Content changed during loading, ignoring result")
+                    return
+                }
+                
                 switch result {
                 case .success(let audioURL):
                     self.setupAudioPlayer(with: audioURL, content: content, autoPlay: autoPlay)
                 case .failure(let error):
                     print("❌ Failed to load audio: \(error.localizedDescription)")
-                    self.isLoadingAudio = false
-                    // Clear buffering state on error
-                    self.isBuffering = false
+                    self.handleLoadingError()
                     // Fallback to direct URL if cache fails
                     self.setupAudioPlayer(with: remoteURL, content: content, autoPlay: autoPlay)
                 }
@@ -180,7 +190,20 @@ class AudioPlayerService: ObservableObject {
         }
     }
     
+    private func handleLoadingError() {
+        self.isLoadingAudio = false
+        self.isBuffering = false
+        // Don't clear hasLoadedTrack or currentContent to maintain UI state
+        // Just clear the loading states
+    }
+    
     private func setupAudioPlayer(with url: URL, content: Content, autoPlay: Bool = false) {
+        // Clean up any existing player first
+        if let timeObserver = timeObserver, let player = player {
+            player.removeTimeObserver(timeObserver)
+            self.timeObserver = nil
+        }
+        
         playerItem = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: playerItem)
         self.currentLoadedURL = url
@@ -191,6 +214,8 @@ class AudioPlayerService: ObservableObject {
         self.isBuffering = false
         
         loadArtworkOnce()
+        
+        print("✅ Audio player setup complete for: \(content.title)")
         
         if let currentItem = playerItem {
             Task {

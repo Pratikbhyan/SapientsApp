@@ -1,7 +1,7 @@
 import SwiftUI
 import Combine
 
-/// Lightweight view-model that just converts AudioPlayerService → UI flags
+/// Simple state manager for mini player visibility and full player presentation
 @MainActor
 final class MiniPlayerState: ObservableObject {
     @Published var isVisible: Bool = false
@@ -11,31 +11,23 @@ final class MiniPlayerState: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     init(player: AudioPlayerService) {
+        // Show mini player when track is loaded and full player is not shown
         player.$hasLoadedTrack
+            .combineLatest($isPresentingFullPlayer)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] hasLoadedTrack in
-                guard let self = self else { return }
-                // Only set visible if we have a track AND we're not presenting full player
-                if hasLoadedTrack && !self.isPresentingFullPlayer {
-                    self.isVisible = true
-                } else if !hasLoadedTrack {
-                    self.isVisible = false
-                }
+            .sink { [weak self] hasTrack, isFullPlayerShown in
+                self?.isVisible = hasTrack && !isFullPlayerShown
             }
             .store(in: &cancellables)
-            
-        $isPresentingFullPlayer
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] isPresentingFullPlayer in
-                guard let self = self else { return }
-                if isPresentingFullPlayer {
-                    // Always hide mini player when full player is presented
-                    self.isVisible = false
-                } else if player.hasLoadedTrack {
-                    // Show mini player when full player is dismissed and we have a track
-                    self.isVisible = true
-                }
-            }
-            .store(in: &cancellables)
+    }
+    
+    /// Present the full player
+    func presentFullPlayer() {
+        isPresentingFullPlayer = true
+    }
+    
+    /// Dismiss the full player
+    func dismissFullPlayer() {
+        isPresentingFullPlayer = false
     }
 }
