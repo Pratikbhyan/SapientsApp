@@ -74,7 +74,7 @@ struct LoginView: View {
                     .padding(.top, 15)
                     .padding(.bottom, max(30, geometry.safeAreaInsets.bottom + 10))
                     .background(Color.black.opacity(0.9)) // Semi-transparent background for better readability
-                    .clipShape(RoundedCorner(radius: 30, corners: [.topLeft, .topRight]))
+                    .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
                     .frame(height: 180)
                 }
                 .edgesIgnoringSafeArea(.bottom) // Allow black container to go to the bottom edge
@@ -120,17 +120,6 @@ struct AuthButton: View {
     }
 }
 
-// Helper to selectively round corners
-struct RoundedCorner: Shape {
-    var radius: CGFloat = .infinity
-    var corners: UIRectCorner = .allCorners
-
-    func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
-        return Path(path.cgPath)
-    }
-}
-
 struct LoginView_Previews: PreviewProvider {
     static var previews: some View {
         LoginView()
@@ -166,3 +155,4 @@ struct LoginView_Previews: PreviewProvider {
 // You can find a Google logo SVG/PNG online and add it to your assets.
 // For Apple icon, SFSymbols "applelogo" is used.
 // For email icon, SFSymbols "envelope.fill" is used.
+

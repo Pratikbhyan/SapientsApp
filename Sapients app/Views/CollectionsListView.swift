@@ -6,18 +6,22 @@ struct CollectionTileView: View {
     /// Optional namespace used for hero animation. Pass from parent when needed.
     var coverNamespace: Namespace.ID?
     
+    @Environment(\.colorScheme) private var scheme
+    
     var body: some View {
         ZStack(alignment: .leading) {
+            // Adaptive background: white in light mode, black in dark mode
+            let tileColor: Color = scheme == .light ? .white : .black
             RoundedRectangle(cornerRadius: Tokens.Corner.r2)
-                .fill(Color(.secondarySystemBackground))
+                .fill(tileColor)
                 .cardShadow()
-            HStack(spacing: Tokens.Spacing.l) {
+            HStack(alignment: .top, spacing: Tokens.Spacing.l) {
                 coverImage
                     .frame(width: 132, height: 211)
                     .clipShape(RoundedRectangle(cornerRadius: Tokens.Corner.r2))
                 VStack(alignment: .leading, spacing: 6) {
                     Text(collection.title)
-                        .font(.headline.weight(.semibold))
+                        .font(.custom("Didot-Bold", size: 24))
                         .foregroundColor(.primary)
                     if let desc = collection.description {
                         Text(desc)
@@ -80,15 +84,20 @@ struct CollectionsListView: View {
     @EnvironmentObject private var contentRepo: ContentRepository
     @EnvironmentObject private var audioPlayer: AudioPlayerService
     @EnvironmentObject private var miniState: MiniPlayerState
+    @Environment(\.colorScheme) private var scheme
     
     @State private var resumeContent: Content? = nil
     @State private var resumePosition: Double = 0
 
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                header
+            ZStack(alignment: .top) {
+                // Layer 1: Scrollable content behind the header
                 content
+                    .ignoresSafeArea(edges: .top) // allow content to slide under header
+
+                // Layer 2: Fixed header overlay
+                header
             }
             .navigationBarHidden(true)
         }
@@ -121,6 +130,9 @@ struct CollectionsListView: View {
         } else {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
+                    // Spacer to offset content below the floating header height (150)
+                    Spacer().frame(height: 150)
+
                     if let resume = resumeContent {
                         Text("Jump back in")
                             .font(.title2.bold())
@@ -155,31 +167,37 @@ struct CollectionsListView: View {
                         }
                     }
                 }
-                .padding(.vertical, 20)
+                // Keep horizontal padding but remove top padding (handled by spacer).
                 .padding(.horizontal, Tokens.Spacing.l)
                 // Fix: Add proper bottom padding for tab bar and mini player
                 .padding(.bottom, 120)
             }
             .background(Color(.systemBackground))
+            // Content now allowed to scroll under header
+            // IMPORTANT: The ScrollView should ignore the top safe area
+            .ignoresSafeArea(edges: .top)
         }
     }
 
     // MARK: Header
-    @Environment(\.colorScheme) private var scheme
     private var header: some View {
         let isLight = scheme == .light
         let bg = isLight ? Color.black : Color.white
         let fg = isLight ? Color.white : Color.black
+        // Header with title anchored at the bottom to mimic Episode header styling
         return ZStack {
             bg
+            VStack {
+                Spacer() // pushes content to the bottom edge
             HStack {
                 Text("Collections")
-                    .font(Tokens.FontStyle.title1)
+                        .font(.largeTitle.bold())
                     .foregroundColor(fg)
                 Spacer()
             }
             .padding(.horizontal, Tokens.Spacing.l)
             .padding(.bottom, Tokens.Spacing.s)
+            }
         }
         .frame(height: 150)
         .ignoresSafeArea(edges: .top)

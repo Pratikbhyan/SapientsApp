@@ -16,7 +16,7 @@ struct JumpBackInView: View {
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(content.title)
-                        .font(.headline)
+                        .font(.custom("Didot-Bold", size: 20))
                         .foregroundColor(.primary)
                         .lineLimit(2)
                 }

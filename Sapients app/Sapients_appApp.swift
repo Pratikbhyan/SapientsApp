@@ -86,11 +86,7 @@ struct Sapients_appApp: App {
     @ViewBuilder
     private var fullPlayerSheet: some View {
         if let contentToPlay = audioPlayer.currentContent {
-            ZStack {
-                // Add consistent background for miniplayer-opened PlayingView
-                BlurredBackgroundView()
-                    .edgesIgnoringSafeArea(.all)
-                
+            // Full-screen player sheet without the unavailable BlurredBackgroundView.
                 PlayingView(
                     content: contentToPlay,
                     repository: contentRepository,
@@ -100,7 +96,7 @@ struct Sapients_appApp: App {
                         miniPlayerState.dismissFullPlayer()
                     }
                 )
-            }
+            .ignoresSafeArea() // ensure player covers the entire screen
         }
     }
     

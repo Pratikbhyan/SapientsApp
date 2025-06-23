@@ -22,48 +22,46 @@ struct EpisodesListView: View {
     @State private var dominant: Color = .black
     
     var body: some View {
-        let headerHeight: CGFloat = UIScreen.main.bounds.height * 0.22
-        ScrollView(showsIndicators: false) {
-            GeometryReader { geo in
-                let y = geo.frame(in: .global).minY
-                HeaderView(collection: collection, coverNamespace: coverNamespace)
-                    .frame(width: UIScreen.main.bounds.width,
-                           height: y > 0 ? headerHeight + y : headerHeight)
-                    .offset(y: y > 0 ? -y : 0) // sticky & stretchy
-            }
-            .frame(height: headerHeight) // occupies space in scroll
+        let headerHeight: CGFloat = 150
+        ZStack(alignment: .top) {
+            // Scrollable content behind the header
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    // Spacer so initial content starts just below the header
+                    Color.clear.frame(height: headerHeight)
 
-            VStack(spacing: 0) {
-                if isLoading {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if !episodes.isEmpty {
-                    EpisodeCarousel(episodes: episodes)
-                        .padding(.top, 25)
-                        .padding(.bottom, 140) // Fix: Increased space for tab bar + mini player + home indicator
-                        .offset(y: hasAnimatedCarousel ? 0 : 300)
-                        .opacity(hasAnimatedCarousel ? 1 : 0)
-                        .onAppear {
-                            guard !hasAnimatedCarousel else { return }
-                            withAnimation(.easeOut(duration: 0.4)) { hasAnimatedCarousel = true }
-                        }
-                } else if let _ = errorMessage {
-                    Text("Failed to load episodes")
-                        .foregroundColor(.secondary)
-                        .padding()
-                } else {
-                    Text("No episodes yet")
-                        .foregroundColor(.secondary)
-                        .padding()
+                    if isLoading {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if !episodes.isEmpty {
+                        EpisodeCarousel(episodes: episodes)
+                            .padding(.top, 5)
+                            .offset(y: hasAnimatedCarousel ? 0 : 300)
+                            .opacity(hasAnimatedCarousel ? 1 : 0)
+                            .onAppear {
+                                guard !hasAnimatedCarousel else { return }
+                                withAnimation(.easeOut(duration: 0.4)) { hasAnimatedCarousel = true }
+                            }
+                    } else if let _ = errorMessage {
+                        Text("Failed to load episodes")
+                            .foregroundColor(.secondary)
+                            .padding()
+                    } else {
+                        Text("No episodes yet")
+                            .foregroundColor(.secondary)
+                            .padding()
+                    }
                 }
             }
+            .ignoresSafeArea(edges: .top) // allow content to slide under status bar/header
+
+            // Fixed header overlay
+            HeaderView(collection: collection, coverNamespace: coverNamespace)
+                .frame(height: headerHeight)
+                .ignoresSafeArea(edges: .top)
         }
-        .ignoresSafeArea(edges: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(
-            Color(.systemBackground)
-                .clipShape(TopRoundedShape(radius: 16))
-        )
+        .background(Color(.systemBackground))
         .navigationBarBackButtonHidden(true)
         .toolbarBackground(.hidden, for: .navigationBar)
         .task { await loadEpisodes() }
@@ -86,84 +84,6 @@ struct EpisodesListView: View {
         } catch {
             self.errorMessage = error.localizedDescription
         }
-    }
-}
-
-struct EpisodeTile: View {
-    let episode: Content
-    @EnvironmentObject var audioPlayer: AudioPlayerService
-    @EnvironmentObject var miniPlayerState: MiniPlayerState
-    @EnvironmentObject var contentRepo: ContentRepository
-    @State private var isLoading: Bool = false
-    
-    var body: some View {
-        Button(action: playEpisode) {
-            VStack(alignment: .leading, spacing: 6) {
-                cover
-                    .frame(height: 80)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                Text(episode.title)
-                    .font(.subheadline.bold())
-                    .foregroundColor(.primary)
-                    .lineLimit(2)
-                Text("\(Int.random(in: 8...15)) min") // placeholder duration
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .buttonStyle(.plain)
-        .disabled(isLoading)
-    }
-    
-    @ViewBuilder private var cover: some View {
-        if let urlStr = episode.imageUrl,
-           let url = try? SupabaseManager.shared.client.storage.from("images").getPublicURL(path: urlStr) {
-            CachedAsyncImage(url: url) {
-                Rectangle().fill(Color.gray.opacity(0.3))
-            }
-        } else {
-            Rectangle().fill(Color.gray.opacity(0.3))
-        }
-    }
-    
-    private func playEpisode() {
-        // Prevent multiple simultaneous taps
-        guard !isLoading else { return }
-        guard !miniPlayerState.isPresentingFullPlayer else { return }
-        
-        isLoading = true
-        
-        // Build public URL for audio
-        var audioURL: URL? = nil
-        if episode.audioUrl.starts(with: "http") {
-            audioURL = URL(string: episode.audioUrl)
-        } else {
-            do {
-                audioURL = try SupabaseManager.shared.client.storage.from("audio").getPublicURL(path: episode.audioUrl)
-            } catch {
-                print("❌ Failed to get audio URL: \(error)")
-                isLoading = false
-                return
-            }
-        }
-        
-        guard let url = audioURL else {
-            print("❌ Invalid audio URL for episode: \(episode.title)")
-            isLoading = false
-            return
-        }
-        
-        // Load audio and present player
-        audioPlayer.loadAudio(from: url, for: episode, autoPlay: true)
-        
-        // Fetch transcriptions in background
-        Task {
-            await contentRepo.fetchTranscriptions(for: episode.id, from: episode.transcriptionUrl)
-        }
-        
-        // Present full player immediately
-        miniPlayerState.presentFullPlayer()
-        isLoading = false
     }
 }
 
@@ -201,8 +121,8 @@ private struct HeaderView: View {
                     Text(collection.title)
                         .font(.largeTitle.bold())
                         .foregroundColor(textColor)
-                        .padding(.leading, 24)
-                        .padding(.bottom, 32)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.bottom, Tokens.Spacing.s)
                 }
             }
         }
@@ -213,21 +133,26 @@ private struct HeaderView: View {
 private struct EpisodeCarousel: View {
     let episodes: [Content]
     private let cardWidthFactor: CGFloat = 0.9
+
     var body: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width * cardWidthFactor
-            let height = width * 1.45
-            TabView(selection: .constant(0)) {
-                ForEach(Array(episodes.enumerated()), id: \ .offset) { index, ep in
-                    EpisodeCard(episode: ep, cardWidth: width)
-                        .frame(width: width, height: height)
-                        .tag(index)
-                        .padding(.horizontal, (proxy.size.width - width) / 2)
+        // Calculate width based on the device screen to avoid GeometryReader inside ScrollView
+        let screenWidth = UIScreen.main.bounds.width
+        let cardWidth = screenWidth * cardWidthFactor
+        let cardPadding = (screenWidth - cardWidth) / 2
+
+        TabView(selection: .constant(0)) {
+            ForEach(Array(episodes.enumerated()), id: \ .offset) { index, ep in
+                VStack(spacing: 0) {
+                    EpisodeCard(episode: ep, cardWidth: cardWidth)
+                    Spacer() // pushes card to top of fixed frame
                 }
+                .padding(.horizontal, cardPadding)
+                .tag(index)
             }
-            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
         }
-        .frame(height: UIScreen.main.bounds.height * 0.8)
+        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+        // Give the carousel a consistent height: 60% of screen + extra space for title spacing
+        .frame(height: UIScreen.main.bounds.height * 0.6 + 60)
     }
 }
 
@@ -242,57 +167,54 @@ private struct EpisodeCard: View {
     @State private var textColor: Color = .white
     
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 12) {
-                // Artwork card
-                ZStack(alignment: .bottom) {
-                    cover
-                        .frame(width: cardWidth, height: cardWidth)
-                        .clipShape(RoundedRectangle(cornerRadius: 24))
-                }
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24)
-                        .stroke(Color.primary.opacity(0.05), lineWidth: 0.5)
-                )
-                .onTapGesture(perform: play)
-
-                // Play button overlapping bottom half of cover
-                Button(action: play) {
-                    Image(systemName: "play.circle.fill")
-                        .font(.system(size: 64))
-                        .foregroundColor(.white)
-                        .shadow(radius: 4)
-                }
-                .offset(y: -92) // overlap half its height
-
-                // Title & scrollable description
-                VStack(alignment: .center, spacing: 6) {
-                    Text(episode.title)
-                        .font(.headline.weight(.semibold))
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(.primary)
-                        .lineLimit(nil)
-
-                    if let desc = episode.description, !desc.isEmpty {
-                        Text(desc)
-                            .font(.subheadline)
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 4)
+        VStack(spacing: 16) {
+            // --- KEY LAYOUT CHANGE ---
+            // Cover image with overlayed play button (overlay doesn't affect layout below)
+            cover
+                .frame(width: cardWidth, height: cardWidth)
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+                .overlay(alignment: .bottomTrailing) {
+                    Button(action: play) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 48))
+                            .foregroundColor(.white.opacity(0.9))
+                            .shadow(radius: 3)
                     }
+                    .padding(12)
                 }
-                .frame(width: cardWidth * 0.9)
+
+            // Title & description
+            VStack(alignment: .center, spacing: 6) {
+                Text(episode.title)
+                    .font(.custom("Didot-Bold", size: 24))
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.primary)
+
+                if let desc = episode.description, !desc.isEmpty {
+                    Text(desc)
+                        .font(.subheadline)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 4)
+                }
             }
-            .frame(maxWidth: cardWidth)
+            .frame(width: cardWidth * 0.9)
         }
         .frame(width: cardWidth)
     }
     
     // MARK: - Helpers
     @ViewBuilder private var cover: some View {
-        if let urlStr = episode.imageUrl,
-           let url = try? SupabaseManager.shared.client.storage.from("images").getPublicURL(path: urlStr) {
-            CachedAsyncImage(url: url) {
+        if let rawPath = episode.imageUrl {
+            // Trim whitespace/newlines and strip leading "images/" if present
+            let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+            let path = trimmed.hasPrefix("images/") ? String(trimmed.dropFirst("images/".count)) : trimmed
+
+            if let url = try? SupabaseManager.shared.client.storage.from("images").getPublicURL(path: path) {
+                CachedAsyncImage(url: url) {
+                    Color.gray.opacity(0.3)
+                }
+            } else {
                 Color.gray.opacity(0.3)
             }
         } else {
