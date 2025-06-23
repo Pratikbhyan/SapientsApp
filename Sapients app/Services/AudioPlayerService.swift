@@ -28,18 +28,27 @@ class AudioPlayerService: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     
+    private var lastPersist: Date = Date()
+    private let persistInterval: TimeInterval = 5 // seconds
+    
     private init() {
         setupAudioSession()
         setupRemoteTransportControls()
     }
     
+    /// Configure an initial, non-intrusive audio session that allows other audio (e.g. Music app) to continue playing
+    /// when the user merely opens the Sapients app without starting playback.
+    ///
+    /// We set the category to `.ambient` with the `.mixWithOthers` option and **do not** activate the session yet.
+    /// When the user actually starts playback (`play()`), we will promote the session to `.playback` and activate it.
     private func setupAudioSession() {
         #if os(iOS)
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
-            try AVAudioSession.sharedInstance().setActive(true)
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+            // Intentionally NOT calling setActive(true) here to avoid interrupting other audio.
         } catch {
-            print("Failed to set up audio session: \(error)")
+            print("Failed to set up passive audio session: \(error)")
         }
         #endif
     }
@@ -262,6 +271,7 @@ class AudioPlayerService: ObservableObject {
                 strongSelf.currentTime = CMTimeGetSeconds(time)
                 if strongSelf.isPlaying {
                    strongSelf.updateNowPlayingInfo()
+                   strongSelf.persistProgress()
                 }
             }
         }
@@ -286,11 +296,16 @@ class AudioPlayerService: ObservableObject {
     }
 
     func play() {
+        #if os(iOS)
         do {
-            try AVAudioSession.sharedInstance().setActive(true)
+            let session = AVAudioSession.sharedInstance()
+            // Elevate the session to playback and activate it so our audio gets priority once the user presses play.
+            try session.setCategory(.playback, mode: .default, options: [])
+            try session.setActive(true)
         } catch {
             print("Failed to activate audio session for play: \(error)")
         }
+        #endif
         player?.play()
         player?.rate = self.currentPlaybackRate
         isPlaying = true
@@ -301,6 +316,7 @@ class AudioPlayerService: ObservableObject {
         player?.pause()
         isPlaying = false
         updateNowPlayingInfo()
+        persistProgress()
     }
     
     func togglePlayPause() {
@@ -359,6 +375,8 @@ class AudioPlayerService: ObservableObject {
         self.isBuffering = false
         
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        
+        persistProgress()
     }
 
     func updateCurrentTranscription(transcriptions: [Transcription]) {
@@ -378,5 +396,25 @@ class AudioPlayerService: ObservableObject {
             player.removeTimeObserver(timeObserver)
         }
         cancellables.forEach { $0.cancel() }
+    }
+    
+    private func persistProgress() {
+        guard let content = currentContent else { return }
+        let now = Date()
+        if now.timeIntervalSince(lastPersist) < persistInterval { return }
+        lastPersist = now
+        if let data = try? JSONEncoder().encode(content) {
+            UserDefaults.standard.set(data, forKey: "lastEpisodeContent")
+        }
+        UserDefaults.standard.set(currentTime, forKey: "lastEpisodePosition")
+    }
+    
+    static func loadSavedProgress() -> (Content, Double)? {
+        if let data = UserDefaults.standard.data(forKey: "lastEpisodeContent"),
+           let content = try? JSONDecoder().decode(Content.self, from: data) {
+            let pos = UserDefaults.standard.double(forKey: "lastEpisodePosition")
+            return (content, pos)
+        }
+        return nil
     }
 }

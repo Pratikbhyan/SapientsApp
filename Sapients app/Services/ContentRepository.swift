@@ -222,6 +222,23 @@ class ContentRepository: ObservableObject {
         }
     }
     
+    // MARK: - Single Episode fetch
+    func fetchEpisode(by id: UUID) async -> Content? {
+        do {
+            let res: Content = try await supabase
+                .from("episodes")
+                .select("id, title, description, audio_url, image_url, created_at, transcription_url, collection_id")
+                .eq("id", value: id.uuidString)
+                .single()
+                .execute()
+                .value
+            return res
+        } catch {
+            print("❌ Failed to fetch episode by ID: \(error)")
+            return nil
+        }
+    }
+    
     // MARK: - Helper Methods
     private func todayDateString() -> String {
         return dateToString(Date())

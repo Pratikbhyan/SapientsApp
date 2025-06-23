@@ -39,8 +39,8 @@ struct EpisodesListView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if !episodes.isEmpty {
                     EpisodeCarousel(episodes: episodes)
-                        .padding(.top, 24)
-                        .padding(.bottom, 60) // space for home indicator
+                        .padding(.top, 25)
+                        .padding(.bottom, 140) // Fix: Increased space for tab bar + mini player + home indicator
                         .offset(y: hasAnimatedCarousel ? 0 : 300)
                         .opacity(hasAnimatedCarousel ? 1 : 0)
                         .onAppear {
@@ -60,6 +60,10 @@ struct EpisodesListView: View {
         }
         .ignoresSafeArea(edges: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(
+            Color(.systemBackground)
+                .clipShape(TopRoundedShape(radius: 16))
+        )
         .navigationBarBackButtonHidden(true)
         .toolbarBackground(.hidden, for: .navigationBar)
         .task { await loadEpisodes() }
@@ -168,63 +172,35 @@ private struct HeaderView: View {
     let collection: Collection
     var coverNamespace: Namespace.ID?
     @Environment(\.dismiss) private var dismiss
-    @State private var dominant: Color = .black
+    @Environment(\.colorScheme) private var scheme
     
     var body: some View {
         GeometryReader { geo in
+            let isLight = scheme == .light
+            let bgColor: Color = isLight ? .black : .white
+            let textColor: Color = isLight ? .white : .black
+
             ZStack(alignment: .topLeading) {
-                if let url = getCollectionImageURL(for: collection) {
-                    let img = CachedAsyncImage(url: url) { Color.gray.opacity(0.3) }
-                    if let ns = coverNamespace {
-                        img
-                            .matchedGeometryEffect(id: "cover-\(collection.id)", in: ns)
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .clipped()
-                            .ignoresSafeArea(edges: .top)
-                            .onAppear {
-                                // extract dominant color asynchronously
-                                DispatchQueue.global(qos: .userInitiated).async {
-                                    if let uiImage = UIImage(data: try! Data(contentsOf: url)) {
-                                        if let c = ImageColorExtractor.dominantColor(from: uiImage) {
-                                            DispatchQueue.main.async { self.dominant = c }
-                                        }
-                                    }
-                                }
-                            }
-                    } else {
-                        img
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .clipped()
-                            .ignoresSafeArea(edges: .top)
-                    }
-                } else {
-                    Color.gray.opacity(0.3)
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .ignoresSafeArea(edges: .top)
-                }
-                
-                // Overlay gradient: transitions from transparent, through the extracted dominant color, to solid black at the very bottom for maximum legibility.
-                LinearGradient(colors: [.clear, dominant.opacity(0.6), .black], startPoint: .top, endPoint: .bottom)
+                bgColor
                     .frame(width: geo.size.width, height: geo.size.height)
-                
+                    .ignoresSafeArea(edges: .top)
+
                 Button(action: { dismiss() }) {
                     Image(systemName: "chevron.left")
                         .font(.title3.weight(.semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(textColor)
                         .frame(width: 44, height: 44)
-                        .background(Color.black.opacity(0.4))
+                        .background(bgColor.opacity(0.7))
                         .clipShape(Circle())
                 }
                 .padding(.leading, 16)
                 .padding(.top, geo.safeAreaInsets.top + 44)
-                
+
                 VStack {
                     Spacer()
                     Text(collection.title)
                         .font(.largeTitle.bold())
-                        .foregroundColor(.white)
+                        .foregroundColor(textColor)
                         .padding(.leading, 24)
                         .padding(.bottom, 32)
                 }
@@ -251,7 +227,7 @@ private struct EpisodeCarousel: View {
             }
             .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
         }
-        .frame(height: UIScreen.main.bounds.width * cardWidthFactor * 1.45)
+        .frame(height: UIScreen.main.bounds.height * 0.8)
     }
 }
 
@@ -266,40 +242,48 @@ private struct EpisodeCard: View {
     @State private var textColor: Color = .white
     
     var body: some View {
-        VStack(spacing: 12) {
-            // Artwork card
-            ZStack {
-                cover
-                    .frame(width: cardWidth, height: cardWidth)
-                    .clipShape(RoundedRectangle(cornerRadius: 24))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 24)
-                            .stroke(Color.primary.opacity(0.05), lineWidth: 0.5)
-                    )
-
-                // Play icon overlay
-                Image(systemName: "play.circle.fill")
-                    .font(.system(size: 56))
-                    .foregroundColor(.white.opacity(0.85))
-            }
-            .onTapGesture(perform: play)
-
-            // Title & description centred
-            VStack(alignment: .center, spacing: 4) {
-                Text(episode.title)
-                    .font(.headline.weight(.semibold))
-                    .multilineTextAlignment(.center)
-                    .foregroundColor(.primary)
-                    .lineLimit(2)
-                if let desc = episode.description, !desc.isEmpty {
-                    Text(desc)
-                        .font(.subheadline)
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(.secondary)
-                        .lineLimit(3)
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 12) {
+                // Artwork card
+                ZStack(alignment: .bottom) {
+                    cover
+                        .frame(width: cardWidth, height: cardWidth)
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
                 }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24)
+                        .stroke(Color.primary.opacity(0.05), lineWidth: 0.5)
+                )
+                .onTapGesture(perform: play)
+
+                // Play button overlapping bottom half of cover
+                Button(action: play) {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 64))
+                        .foregroundColor(.white)
+                        .shadow(radius: 4)
+                }
+                .offset(y: -92) // overlap half its height
+
+                // Title & scrollable description
+                VStack(alignment: .center, spacing: 6) {
+                    Text(episode.title)
+                        .font(.headline.weight(.semibold))
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(.primary)
+                        .lineLimit(nil)
+
+                    if let desc = episode.description, !desc.isEmpty {
+                        Text(desc)
+                            .font(.subheadline)
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 4)
+                    }
+                }
+                .frame(width: cardWidth * 0.9)
             }
-            .frame(width: cardWidth * 0.9)
+            .frame(maxWidth: cardWidth)
         }
         .frame(width: cardWidth)
     }
@@ -398,6 +382,19 @@ struct BottomRoundedShape: Shape {
         let path = UIBezierPath(
             roundedRect: rect,
             byRoundingCorners: [.bottomLeft, .bottomRight],
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(path.cgPath)
+    }
+}
+
+// Shape for rounding only top corners
+struct TopRoundedShape: Shape {
+    var radius: CGFloat = 16
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: [.topLeft, .topRight],
             cornerRadii: CGSize(width: radius, height: radius)
         )
         return Path(path.cgPath)
